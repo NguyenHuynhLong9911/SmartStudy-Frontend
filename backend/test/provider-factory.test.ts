@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { ZodError } from "zod";
 
 import {
+  createAuthProviderFromEnv,
   ProviderFactory,
   ProviderNotRegisteredError,
   type ProviderRegistry,
   type Providers,
 } from "../src/provider-factory.js";
+import { JwtAuthProvider } from "../src/adapters/auth/jwt-auth-provider.js";
+import type { IAuthRepository } from "../src/modules/auth/auth-repository.js";
 import { loadProviderConfig } from "../src/provider-config.js";
 import type {
   IAuthProvider,
@@ -112,6 +115,29 @@ describe("ProviderFactory", () => {
       ProviderFactory.fromEnv(registry, {}).createProviders(),
     ).toThrow(
       new ProviderNotRegisteredError("email", "smtp"),
+    );
+  });
+
+  it("composes the JWT adapter from environment config", () => {
+    const repository = Object.freeze({}) as IAuthRepository;
+
+    expect(
+      createAuthProviderFromEnv(repository, {
+        AUTH_PROVIDER: "jwt",
+        JWT_SECRET: "test-secret-with-at-least-32-characters",
+      }),
+    ).toBeInstanceOf(JwtAuthProvider);
+  });
+
+  it("fails fast for an auth adapter that is not implemented yet", () => {
+    const repository = Object.freeze({}) as IAuthRepository;
+
+    expect(() =>
+      createAuthProviderFromEnv(repository, {
+        AUTH_PROVIDER: "cognito",
+      }),
+    ).toThrow(
+      new ProviderNotRegisteredError("auth", "cognito"),
     );
   });
 });
