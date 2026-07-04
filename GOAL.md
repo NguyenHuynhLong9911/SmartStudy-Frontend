@@ -52,7 +52,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 ## 2. Trạng thái hiện tại
 
 **Phase đang làm:** `Phase 1 — MVP lõi (RAG local)` — chờ trả lời câu hỏi mục 5 trước khi code
-**Task/branch đang mở (nếu có):** `feature/p1-storage-provider`
+**Task/branch đang mở (nếu có):** _(không có — chuẩn bị task kế tiếp)_
 **Cập nhật lần cuối:** `2026-07-04`
 
 ---
@@ -70,7 +70,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 - [x] **DoD Phase 0:** đăng ký/đăng nhập thật, JWT hợp lệ, chạy qua `docker compose up`, mỗi task trên đã có PR riêng đã merge vào `develop`, không có credential AWS trong repo
 
 ### Phase 1 — MVP lõi (RAG local)
-- [ ] `feat(storage): S3CompatibleStorageProvider (MinIO)` implement `IStorageProvider`
+- [x] `feat(storage): S3CompatibleStorageProvider (MinIO)` implement `IStorageProvider`
 - [ ] `feat(db): migration bảng documents + document_chunks`
 - [ ] `feat(documents): endpoint upload presigned URL + complete`
 - [ ] `feat(queue): RedisQueueProvider (BullMQ) + worker process riêng`
