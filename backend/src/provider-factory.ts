@@ -12,6 +12,8 @@ import {
 import { BcryptPasswordHasher } from "./adapters/auth/bcrypt-password-hasher.js";
 import { loadJwtAuthConfig } from "./adapters/auth/jwt-auth-config.js";
 import { JwtAuthProvider } from "./adapters/auth/jwt-auth-provider.js";
+import { loadS3CompatibleStorageConfig } from "./adapters/storage/s3-compatible-storage-config.js";
+import { S3CompatibleStorageProvider } from "./adapters/storage/s3-compatible-storage-provider.js";
 import type { IAuthRepository } from "./modules/auth/auth-repository.js";
 import type {
   IAuthProvider,
@@ -98,11 +100,7 @@ export class ProviderFactory {
         this.config.queueProvider,
         this.registry.queue,
       ),
-      storage: this.resolve(
-        "storage",
-        this.config.storageProvider,
-        this.registry.storage,
-      ),
+      storage: this.createStorageProvider(),
       vectorStore: this.resolve(
         "vectorStore",
         this.config.vectorStore,
@@ -116,6 +114,14 @@ export class ProviderFactory {
       "auth",
       this.config.authProvider,
       this.registry.auth,
+    );
+  }
+
+  createStorageProvider(): IStorageProvider {
+    return this.resolve(
+      "storage",
+      this.config.storageProvider,
+      this.registry.storage,
     );
   }
 
@@ -159,4 +165,26 @@ export function createAuthProviderFromEnv(
   };
 
   return new ProviderFactory(config, registry).createAuthProvider();
+}
+
+export function createStorageProviderFromEnv(
+  environment: NodeJS.ProcessEnv = process.env,
+): IStorageProvider {
+  const config = loadProviderConfig(environment);
+  const registry: ProviderRegistry = {
+    auth: {},
+    email: {},
+    embedding: {},
+    llm: {},
+    queue: {},
+    storage: {
+      "s3-compatible": () =>
+        new S3CompatibleStorageProvider(
+          loadS3CompatibleStorageConfig(environment),
+        ),
+    },
+    vectorStore: {},
+  };
+
+  return new ProviderFactory(config, registry).createStorageProvider();
 }

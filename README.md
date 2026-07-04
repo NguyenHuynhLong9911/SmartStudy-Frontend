@@ -35,6 +35,11 @@ Các endpoint local:
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
+Storage dùng adapter S3-compatible. Khi chạy Compose, API và worker tự nhận endpoint,
+bucket và credential MinIO từ các biến `MINIO_*`. Khi chạy backend trực tiếp trên
+máy host, dùng nhóm biến `STORAGE_*` trong `.env.example`; nếu có
+`STORAGE_ENDPOINT`, path-style access mặc định được bật để tương thích MinIO.
+
 Kiểm tra nhanh:
 
 ```bash
