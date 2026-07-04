@@ -52,7 +52,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 ## 2. Trạng thái hiện tại
 
 **Phase đang làm:** `Phase 0 — Foundation (local)`
-**Task/branch đang mở (nếu có):** `feature/p0-ci`
+**Task/branch đang mở (nếu có):** _(không có — chuẩn bị task kế tiếp)_
 **Cập nhật lần cuối:** `2026-07-04`
 
 ---
@@ -66,7 +66,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 - [x] `feat(core): provider factory đọc .env` — chọn adapter theo config
 - [x] `feat(db): prisma schema + migration đầu tiên` — bảng `users`, extension `vector`
 - [x] `feat(auth): JwtAuthProvider + endpoint register/login/refresh`
-- [ ] `chore(ci): setup GitHub Actions lint + test`
+- [x] `chore(ci): setup GitHub Actions lint + test`
 - [ ] **DoD Phase 0:** đăng ký/đăng nhập thật, JWT hợp lệ, chạy qua `docker compose up`, mỗi task trên đã có PR riêng đã merge vào `develop`, không có credential AWS trong repo
 
 ### Phase 1 — MVP lõi (RAG local)
