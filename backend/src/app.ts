@@ -1,6 +1,14 @@
 import express, { type Express } from "express";
 
-export function createApp(): Express {
+import { errorHandler } from "./middleware/error-handler.js";
+import { createAuthRouter } from "./modules/auth/auth-routes.js";
+import type { IAuthProvider } from "./ports/index.js";
+
+export interface AppDependencies {
+  readonly authProvider: IAuthProvider;
+}
+
+export function createApp(dependencies: AppDependencies): Express {
   const app = express();
 
   app.disable("x-powered-by");
@@ -12,6 +20,9 @@ export function createApp(): Express {
       status: "ok",
     });
   });
+
+  app.use("/api/v1/auth", createAuthRouter(dependencies.authProvider));
+  app.use(errorHandler);
 
   return app;
 }

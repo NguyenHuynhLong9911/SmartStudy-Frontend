@@ -9,6 +9,10 @@ import {
   type StorageProviderName,
   type VectorStoreName,
 } from "./provider-config.js";
+import { BcryptPasswordHasher } from "./adapters/auth/bcrypt-password-hasher.js";
+import { loadJwtAuthConfig } from "./adapters/auth/jwt-auth-config.js";
+import { JwtAuthProvider } from "./adapters/auth/jwt-auth-provider.js";
+import type { IAuthRepository } from "./modules/auth/auth-repository.js";
 import type {
   IAuthProvider,
   IEmailProvider,
@@ -77,11 +81,7 @@ export class ProviderFactory {
 
   createProviders(): Providers {
     return {
-      auth: this.resolve(
-        "auth",
-        this.config.authProvider,
-        this.registry.auth,
-      ),
+      auth: this.createAuthProvider(),
       email: this.resolve(
         "email",
         this.config.emailProvider,
@@ -111,6 +111,14 @@ export class ProviderFactory {
     };
   }
 
+  createAuthProvider(): IAuthProvider {
+    return this.resolve(
+      "auth",
+      this.config.authProvider,
+      this.registry.auth,
+    );
+  }
+
   private resolve<TName extends string, TProvider>(
     providerKind: string,
     providerName: TName,
@@ -124,4 +132,31 @@ export class ProviderFactory {
 
     return buildProvider();
   }
+}
+
+export function createAuthProviderFromEnv(
+  repository: IAuthRepository,
+  environment: NodeJS.ProcessEnv = process.env,
+): IAuthProvider {
+  const config = loadProviderConfig(environment);
+  const registry: ProviderRegistry = {
+    auth: {
+      jwt: () => {
+        const jwtConfig = loadJwtAuthConfig(environment);
+        return new JwtAuthProvider(
+          repository,
+          new BcryptPasswordHasher(jwtConfig.bcryptCost),
+          jwtConfig,
+        );
+      },
+    },
+    email: {},
+    embedding: {},
+    llm: {},
+    queue: {},
+    storage: {},
+    vectorStore: {},
+  };
+
+  return new ProviderFactory(config, registry).createAuthProvider();
 }

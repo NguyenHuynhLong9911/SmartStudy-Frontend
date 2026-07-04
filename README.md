@@ -24,6 +24,8 @@ docker compose ps
 ```
 
 Trên PowerShell, dùng `Copy-Item .env.example .env` thay cho lệnh `cp`.
+Trước khi chạy Compose, đặt `JWT_SECRET` trong `.env` bằng một chuỗi ngẫu nhiên
+tối thiểu 32 ký tự; file mẫu cố tình để trống để không commit secret.
 
 Các endpoint local:
 
@@ -39,6 +41,11 @@ Kiểm tra nhanh:
 curl http://localhost:3000/health
 docker compose logs worker
 ```
+
+Auth API hiện có các endpoint `POST /api/v1/auth/register`,
+`POST /api/v1/auth/login`, `POST /api/v1/auth/refresh` và
+`POST /api/v1/auth/logout`. Password phải có tối thiểu 12 ký tự; refresh token
+được lưu dạng hash và được rotate khi gọi endpoint refresh.
 
 Dừng service nhưng giữ dữ liệu:
 
