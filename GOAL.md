@@ -52,7 +52,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 ## 2. Trạng thái hiện tại
 
 **Phase đang làm:** `Phase 0 — Foundation (local)`
-**Task/branch đang mở (nếu có):** `feature/p0-provider-factory`
+**Task/branch đang mở (nếu có):** _(không có — chuẩn bị task kế tiếp)_
 **Cập nhật lần cuối:** `2026-07-04`
 
 ---
@@ -63,7 +63,7 @@ tạo branch → code + test → commit (Conventional Commits) → push
 - [x] `chore(infra): khởi tạo repo structure` — tạo `frontend/`, `backend/`, `docs/`, `docker-compose.yml`
 - [x] `chore(infra): setup docker compose` — postgres(pgvector), redis, minio, api, worker chạy được `docker compose up -d`
 - [x] `feat(core): định nghĩa 7 port interface` — Storage, VectorStore, LLM, Embedding, Auth, Queue, Email trong `backend/src/ports/`
-- [ ] `feat(core): provider factory đọc .env` — chọn adapter theo config
+- [x] `feat(core): provider factory đọc .env` — chọn adapter theo config
 - [ ] `feat(db): prisma schema + migration đầu tiên` — bảng `users`, extension `vector`
 - [ ] `feat(auth): JwtAuthProvider + endpoint register/login/refresh`
 - [ ] `chore(ci): setup GitHub Actions lint + test`
