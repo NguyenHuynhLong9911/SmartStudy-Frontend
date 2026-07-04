@@ -13,4 +13,52 @@ docker-compose.yml  Hạ tầng local
 GOAL.md             Kế hoạch và trạng thái triển khai
 ```
 
-Hướng dẫn chạy local sẽ được bổ sung cùng task Docker Compose.
+## Chạy local bằng Docker Compose
+
+Yêu cầu: Docker Engine có Compose v2.
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
+```
+
+Trên PowerShell, dùng `Copy-Item .env.example .env` thay cho lệnh `cp`.
+
+Các endpoint local:
+
+- API health: <http://localhost:3000/health>
+- MinIO API: <http://localhost:9000>
+- MinIO Console: <http://localhost:9001>
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+
+Kiểm tra nhanh:
+
+```bash
+curl http://localhost:3000/health
+docker compose logs worker
+```
+
+Dừng service nhưng giữ dữ liệu:
+
+```bash
+docker compose down
+```
+
+Chỉ dùng `docker compose down -v` khi chủ động muốn xoá toàn bộ dữ liệu local.
+
+## Backend
+
+```bash
+cd backend
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Lệnh migration Prisma và seed sẽ được bổ sung trong task database Phase 0.
+API key Anthropic lấy từ Anthropic Console và đặt vào `ANTHROPIC_API_KEY` trong
+file `.env`; không commit file này.
