@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import {
   createAuthProviderFromEnv,
+  createQueueProviderFromEnv,
   createStorageProviderFromEnv,
   ProviderFactory,
   ProviderNotRegisteredError,
@@ -10,6 +11,7 @@ import {
   type Providers,
 } from "../src/provider-factory.js";
 import { JwtAuthProvider } from "../src/adapters/auth/jwt-auth-provider.js";
+import { RedisQueueProvider } from "../src/adapters/queue/redis-queue-provider.js";
 import { S3CompatibleStorageProvider } from "../src/adapters/storage/s3-compatible-storage-provider.js";
 import type { IAuthRepository } from "../src/modules/auth/auth-repository.js";
 import { loadProviderConfig } from "../src/provider-config.js";
@@ -142,6 +144,15 @@ describe("ProviderFactory", () => {
     ).toBeInstanceOf(S3CompatibleStorageProvider);
   });
 
+  it("composes the Redis queue adapter from environment config", () => {
+    expect(
+      createQueueProviderFromEnv({
+        QUEUE_PROVIDER: "redis",
+        REDIS_URL: "redis://localhost:6379",
+      }),
+    ).toBeInstanceOf(RedisQueueProvider);
+  });
+
   it("fails fast for an auth adapter that is not implemented yet", () => {
     const repository = Object.freeze({}) as IAuthRepository;
 
@@ -151,6 +162,16 @@ describe("ProviderFactory", () => {
       }),
     ).toThrow(
       new ProviderNotRegisteredError("auth", "cognito"),
+    );
+  });
+
+  it("fails fast for a queue adapter that is not implemented yet", () => {
+    expect(() =>
+      createQueueProviderFromEnv({
+        QUEUE_PROVIDER: "sqs",
+      }),
+    ).toThrow(
+      new ProviderNotRegisteredError("queue", "sqs"),
     );
   });
 });

@@ -12,6 +12,8 @@ import {
 import { BcryptPasswordHasher } from "./adapters/auth/bcrypt-password-hasher.js";
 import { loadJwtAuthConfig } from "./adapters/auth/jwt-auth-config.js";
 import { JwtAuthProvider } from "./adapters/auth/jwt-auth-provider.js";
+import { loadRedisQueueConfig } from "./adapters/queue/redis-queue-config.js";
+import { RedisQueueProvider } from "./adapters/queue/redis-queue-provider.js";
 import { loadS3CompatibleStorageConfig } from "./adapters/storage/s3-compatible-storage-config.js";
 import { S3CompatibleStorageProvider } from "./adapters/storage/s3-compatible-storage-provider.js";
 import type { IAuthRepository } from "./modules/auth/auth-repository.js";
@@ -95,11 +97,7 @@ export class ProviderFactory {
         this.registry.embedding,
       ),
       llm: this.resolve("llm", this.config.llmProvider, this.registry.llm),
-      queue: this.resolve(
-        "queue",
-        this.config.queueProvider,
-        this.registry.queue,
-      ),
+      queue: this.createQueueProvider(),
       storage: this.createStorageProvider(),
       vectorStore: this.resolve(
         "vectorStore",
@@ -122,6 +120,14 @@ export class ProviderFactory {
       "storage",
       this.config.storageProvider,
       this.registry.storage,
+    );
+  }
+
+  createQueueProvider(): IQueueProvider {
+    return this.resolve(
+      "queue",
+      this.config.queueProvider,
+      this.registry.queue,
     );
   }
 
@@ -187,4 +193,33 @@ export function createStorageProviderFromEnv(
   };
 
   return new ProviderFactory(config, registry).createStorageProvider();
+}
+
+export function createQueueProviderFromEnv(
+  environment: NodeJS.ProcessEnv = process.env,
+): RedisQueueProvider {
+  const config = loadProviderConfig(environment);
+  const registry: ProviderRegistry = {
+    auth: {},
+    email: {},
+    embedding: {},
+    llm: {},
+    queue: {
+      redis: () =>
+        new RedisQueueProvider(loadRedisQueueConfig(environment)),
+    },
+    storage: {},
+    vectorStore: {},
+  };
+
+  const queueProvider = new ProviderFactory(
+    config,
+    registry,
+  ).createQueueProvider();
+
+  if (!(queueProvider instanceof RedisQueueProvider)) {
+    throw new TypeError("Resolved queue provider is not RedisQueueProvider");
+  }
+
+  return queueProvider;
 }

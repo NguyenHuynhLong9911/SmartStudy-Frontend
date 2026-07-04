@@ -40,6 +40,11 @@ bucket và credential MinIO từ các biến `MINIO_*`. Khi chạy backend trự
 máy host, dùng nhóm biến `STORAGE_*` trong `.env.example`; nếu có
 `STORAGE_ENDPOINT`, path-style access mặc định được bật để tương thích MinIO.
 
+Queue dùng BullMQ trên Redis. `QUEUE_PREFIX` tách namespace key,
+`QUEUE_WORKER_CONCURRENCY` giới hạn số job xử lý đồng thời trong mỗi worker, và
+worker Compose chạy thành process riêng với graceful shutdown khi nhận `SIGINT`
+hoặc `SIGTERM`.
+
 Kiểm tra nhanh:
 
 ```bash
