@@ -3,12 +3,14 @@ import { ZodError } from "zod";
 
 import {
   createAuthProviderFromEnv,
+  createStorageProviderFromEnv,
   ProviderFactory,
   ProviderNotRegisteredError,
   type ProviderRegistry,
   type Providers,
 } from "../src/provider-factory.js";
 import { JwtAuthProvider } from "../src/adapters/auth/jwt-auth-provider.js";
+import { S3CompatibleStorageProvider } from "../src/adapters/storage/s3-compatible-storage-provider.js";
 import type { IAuthRepository } from "../src/modules/auth/auth-repository.js";
 import { loadProviderConfig } from "../src/provider-config.js";
 import type {
@@ -127,6 +129,17 @@ describe("ProviderFactory", () => {
         JWT_SECRET: "test-secret-with-at-least-32-characters",
       }),
     ).toBeInstanceOf(JwtAuthProvider);
+  });
+
+  it("composes the S3-compatible storage adapter from environment config", () => {
+    expect(
+      createStorageProviderFromEnv({
+        STORAGE_ACCESS_KEY: "minio-access",
+        STORAGE_BUCKET: "smartstudy-documents",
+        STORAGE_ENDPOINT: "http://localhost:9000",
+        STORAGE_SECRET_KEY: "minio-secret",
+      }),
+    ).toBeInstanceOf(S3CompatibleStorageProvider);
   });
 
   it("fails fast for an auth adapter that is not implemented yet", () => {
