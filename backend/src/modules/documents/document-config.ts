@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const PDF_CONTENT_TYPE = "application/pdf";
 export const DEFAULT_DOCUMENT_MAX_SIZE_BYTES = 50 * 1024 * 1024;
+export const DEFAULT_DOCUMENT_CHUNK_MAX_TOKENS = 700;
+export const DEFAULT_DOCUMENT_CHUNK_OVERLAP_TOKENS = 80;
 
 const queueNameSchema = z
   .string()
@@ -23,15 +25,38 @@ const documentEnvironmentSchema = z.object({
     .max(10)
     .default(3),
   DOCUMENT_PROCESSING_QUEUE: queueNameSchema.default("document-processing"),
+  DOCUMENT_CHUNK_MAX_TOKENS: z.coerce
+    .number()
+    .int()
+    .min(50)
+    .max(2_000)
+    .default(DEFAULT_DOCUMENT_CHUNK_MAX_TOKENS),
+  DOCUMENT_CHUNK_OVERLAP_TOKENS: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(500)
+    .default(DEFAULT_DOCUMENT_CHUNK_OVERLAP_TOKENS),
   DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS: z.coerce
     .number()
     .int()
     .min(60)
     .max(3_600)
     .default(900),
-});
+}).refine(
+  (environment) =>
+    environment.DOCUMENT_CHUNK_OVERLAP_TOKENS <
+    environment.DOCUMENT_CHUNK_MAX_TOKENS,
+  {
+    message:
+      "DOCUMENT_CHUNK_OVERLAP_TOKENS must be smaller than DOCUMENT_CHUNK_MAX_TOKENS",
+    path: ["DOCUMENT_CHUNK_OVERLAP_TOKENS"],
+  },
+);
 
 export interface DocumentConfig {
+  readonly chunkMaxTokens: number;
+  readonly chunkOverlapTokens: number;
   readonly maxFileSizeBytes: number;
   readonly processingAttempts: number;
   readonly processingQueue: string;
@@ -44,6 +69,8 @@ export function loadDocumentConfig(
   const parsed = documentEnvironmentSchema.parse(environment);
 
   return {
+    chunkMaxTokens: parsed.DOCUMENT_CHUNK_MAX_TOKENS,
+    chunkOverlapTokens: parsed.DOCUMENT_CHUNK_OVERLAP_TOKENS,
     maxFileSizeBytes: parsed.DOCUMENT_MAX_SIZE_BYTES,
     processingAttempts: parsed.DOCUMENT_PROCESSING_ATTEMPTS,
     processingQueue: parsed.DOCUMENT_PROCESSING_QUEUE,

@@ -67,6 +67,13 @@ Upload tài liệu dùng Bearer access token theo ba bước:
 3. `POST /api/v1/documents/{documentId}/complete`; API kiểm tra metadata object,
    chuyển document sang `processing` và enqueue job xử lý.
 
+Worker đọc queue `DOCUMENT_PROCESSING_QUEUE`, tải PDF từ storage, extract text
+bằng `pdf-parse`, phát hiện heading chương cơ bản, chunk text theo
+`DOCUMENT_CHUNK_MAX_TOKENS` (mặc định 700) với overlap
+`DOCUMENT_CHUNK_OVERLAP_TOKENS` (mặc định 80), gọi embedding provider và lưu vào
+`document_chunks`. PDF không có text extractable sẽ được đánh dấu `failed`; xử lý
+thành công sẽ chuyển document sang `ready`.
+
 Dừng service nhưng giữ dữ liệu:
 
 ```bash
