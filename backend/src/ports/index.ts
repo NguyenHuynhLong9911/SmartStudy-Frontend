@@ -30,9 +30,11 @@ export type {
   IStorageProvider,
   PresignedUpload,
   StorageBody,
+  StorageObjectMetadata,
   StorageUploadInput,
   StorageUploadUrlInput,
 } from "./storage-provider.js";
+export { StorageObjectNotFoundError } from "./storage-provider.js";
 export type {
   IVectorStore,
   VectorRecord,

@@ -1,9 +1,16 @@
 import "dotenv/config";
 
 import { PrismaAuthRepository } from "./adapters/auth/prisma-auth-repository.js";
+import { PrismaDocumentRepository } from "./adapters/documents/prisma-document-repository.js";
 import { createApp } from "./app.js";
 import { createPrismaClient } from "./database/prisma-client.js";
-import { createAuthProviderFromEnv } from "./provider-factory.js";
+import { loadDocumentConfig } from "./modules/documents/document-config.js";
+import { DocumentService } from "./modules/documents/document-service.js";
+import {
+  createAuthProviderFromEnv,
+  createQueueProviderFromEnv,
+  createStorageProviderFromEnv,
+} from "./provider-factory.js";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const databaseUrl = process.env.DATABASE_URL;
@@ -15,7 +22,20 @@ if (!databaseUrl) {
 const prisma = createPrismaClient(databaseUrl);
 const authRepository = new PrismaAuthRepository(prisma);
 const authProvider = createAuthProviderFromEnv(authRepository);
-const app = createApp({ authProvider });
+const documentConfig = loadDocumentConfig();
+const queueProvider = createQueueProviderFromEnv();
+const storageProvider = createStorageProviderFromEnv();
+const documentService = new DocumentService(
+  new PrismaDocumentRepository(prisma),
+  storageProvider,
+  queueProvider,
+  documentConfig,
+);
+const app = createApp({
+  authProvider,
+  documentConfig,
+  documentService,
+});
 
 const server = app.listen(port, "0.0.0.0", () => {
   console.log(
@@ -29,14 +49,40 @@ const server = app.listen(port, "0.0.0.0", () => {
 
 function shutdown(signal: NodeJS.Signals): void {
   console.log(JSON.stringify({ event: "api_stopping", signal }));
-  server.close(async (error) => {
-    if (error) {
-      console.error(error);
-      process.exitCode = 1;
-    }
-
-    await prisma.$disconnect();
+  server.close((error) => {
+    void closeResources(error);
   });
+}
+
+async function closeResources(serverError?: Error): Promise<void> {
+  if (serverError) {
+    console.error(
+      JSON.stringify({
+        error: {
+          name: serverError.name,
+        },
+        event: "api_stop_failed",
+      }),
+    );
+    process.exitCode = 1;
+  }
+
+  try {
+    await Promise.all([
+      prisma.$disconnect(),
+      queueProvider.close(),
+    ]);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: {
+          name: error instanceof Error ? error.name : "UnknownError",
+        },
+        event: "api_resource_close_failed",
+      }),
+    );
+    process.exitCode = 1;
+  }
 }
 
 process.once("SIGINT", shutdown);

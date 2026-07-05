@@ -2,10 +2,15 @@ import express, { type Express } from "express";
 
 import { errorHandler } from "./middleware/error-handler.js";
 import { createAuthRouter } from "./modules/auth/auth-routes.js";
+import type { DocumentConfig } from "./modules/documents/document-config.js";
+import { createDocumentRouter } from "./modules/documents/document-routes.js";
+import type { IDocumentService } from "./modules/documents/document-service.js";
 import type { IAuthProvider } from "./ports/index.js";
 
 export interface AppDependencies {
   readonly authProvider: IAuthProvider;
+  readonly documentConfig: DocumentConfig;
+  readonly documentService: IDocumentService;
 }
 
 export function createApp(dependencies: AppDependencies): Express {
@@ -22,6 +27,14 @@ export function createApp(dependencies: AppDependencies): Express {
   });
 
   app.use("/api/v1/auth", createAuthRouter(dependencies.authProvider));
+  app.use(
+    "/api/v1/documents",
+    createDocumentRouter(
+      dependencies.authProvider,
+      dependencies.documentService,
+      dependencies.documentConfig,
+    ),
+  );
   app.use(errorHandler);
 
   return app;

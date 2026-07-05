@@ -11,6 +11,7 @@ import type {
   IStorageProvider,
   IVectorStore,
   PresignedUpload,
+  StorageObjectMetadata,
   VectorSearchQuery,
 } from "../src/ports/index.js";
 
@@ -37,5 +38,7 @@ describe("provider port contracts", () => {
       .returns.toEqualTypeOf<Promise<AuthTokens>>();
     expectTypeOf<IStorageProvider["getUploadUrl"]>()
       .returns.toEqualTypeOf<Promise<PresignedUpload>>();
+    expectTypeOf<IStorageProvider["getMetadata"]>()
+      .returns.toEqualTypeOf<Promise<StorageObjectMetadata>>();
   });
 });

@@ -3,9 +3,11 @@ import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   type DeleteObjectCommandOutput,
   type GetObjectCommandOutput,
+  type HeadObjectCommandOutput,
   type PutObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { describe, expect, it, vi } from "vitest";
@@ -17,6 +19,7 @@ import {
   StorageObjectBodyError,
 } from "../src/adapters/storage/s3-compatible-storage-provider.js";
 import type { S3CompatibleStorageConfig } from "../src/adapters/storage/s3-compatible-storage-config.js";
+import { StorageObjectNotFoundError } from "../src/ports/index.js";
 
 const config: S3CompatibleStorageConfig = {
   bucket: "smartstudy-documents",
@@ -30,11 +33,21 @@ const configWithCredentials: S3CompatibleStorageConfig = {
   accessKeyId: "minio-access",
   secretAccessKey: "minio-secret",
 };
+const configWithPublicEndpoint: S3CompatibleStorageConfig = {
+  ...configWithCredentials,
+  endpoint: "http://minio:9000",
+  publicEndpoint: "http://localhost:9000",
+};
 
-type S3Command = DeleteObjectCommand | GetObjectCommand | PutObjectCommand;
+type S3Command =
+  | DeleteObjectCommand
+  | GetObjectCommand
+  | HeadObjectCommand
+  | PutObjectCommand;
 type S3Output =
   | DeleteObjectCommandOutput
   | GetObjectCommandOutput
+  | HeadObjectCommandOutput
   | PutObjectCommandOutput;
 
 class FakeS3Client implements S3ClientLike {
@@ -44,6 +57,7 @@ class FakeS3Client implements S3ClientLike {
 
   send(command: DeleteObjectCommand): Promise<DeleteObjectCommandOutput>;
   send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
+  send(command: HeadObjectCommand): Promise<HeadObjectCommandOutput>;
   send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
   async send(command: S3Command): Promise<S3Output> {
     this.commands.push(command);
@@ -148,6 +162,66 @@ describe("S3CompatibleStorageProvider", () => {
     });
   });
 
+  it("reads object metadata through HeadObjectCommand", async () => {
+    const client = new FakeS3Client({
+      $metadata: {},
+      ContentLength: 42,
+      ContentType: "application/pdf",
+      ETag: '"etag-value"',
+    });
+    const provider = new S3CompatibleStorageProvider(config, { client });
+
+    await expect(provider.getMetadata("documents/a.pdf")).resolves.toEqual({
+      contentLength: 42,
+      contentType: "application/pdf",
+      etag: '"etag-value"',
+    });
+    expect(client.commands[0]).toBeInstanceOf(HeadObjectCommand);
+    expect(client.commands[0]?.input).toMatchObject({
+      Bucket: "smartstudy-documents",
+      Key: "documents/a.pdf",
+    });
+  });
+
+  it("omits unavailable object metadata fields", async () => {
+    const provider = new S3CompatibleStorageProvider(config, {
+      client: new FakeS3Client({ $metadata: {} }),
+    });
+
+    await expect(provider.getMetadata("documents/a.pdf")).resolves.toEqual({});
+  });
+
+  it.each([
+    { $metadata: { httpStatusCode: 404 } },
+    { name: "NotFound" },
+    { name: "NoSuchKey" },
+  ])("maps S3 missing-object errors %#", async (storageError) => {
+    const client = {
+      send: vi.fn(async () => {
+        throw storageError;
+      }),
+    } as unknown as S3ClientLike;
+    const provider = new S3CompatibleStorageProvider(config, { client });
+
+    await expect(provider.getMetadata("documents/missing.pdf")).rejects.toThrow(
+      StorageObjectNotFoundError,
+    );
+  });
+
+  it("preserves non-404 metadata failures", async () => {
+    const storageError = new Error("storage unavailable");
+    const client = {
+      send: vi.fn(async () => {
+        throw storageError;
+      }),
+    } as unknown as S3ClientLike;
+    const provider = new S3CompatibleStorageProvider(config, { client });
+
+    await expect(provider.getMetadata("documents/a.pdf")).rejects.toBe(
+      storageError,
+    );
+  });
+
   it("creates presigned upload URLs with required headers", async () => {
     const { calls, createPresignedUrl } = createPresigner();
     const provider = new S3CompatibleStorageProvider(config, {
@@ -210,6 +284,22 @@ describe("S3CompatibleStorageProvider", () => {
     ).resolves.toContain("X-Amz-Signature=");
   });
 
+  it("signs client URLs with the public endpoint", async () => {
+    const provider = new S3CompatibleStorageProvider(
+      configWithPublicEndpoint,
+    );
+
+    const upload = await provider.getUploadUrl({
+      contentLength: 42,
+      contentType: "application/pdf",
+      key: "documents/a.pdf",
+    });
+
+    expect(upload.url).toMatch(
+      /^http:\/\/localhost:9000\/smartstudy-documents\/documents\/a\.pdf\?/,
+    );
+  });
+
   it("rejects default presigning with non-SDK test clients", async () => {
     const provider = new S3CompatibleStorageProvider(config, {
       client: new FakeS3Client(),
@@ -243,6 +333,7 @@ describe("S3CompatibleStorageProvider", () => {
     const provider = new S3CompatibleStorageProvider(config, { client });
 
     await expect(provider.delete("   ")).rejects.toThrow(RangeError);
+    await expect(provider.getMetadata("   ")).rejects.toThrow(RangeError);
     await expect(
       provider.upload({
         body: new Uint8Array(),
