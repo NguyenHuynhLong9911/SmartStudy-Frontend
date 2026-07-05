@@ -27,6 +27,8 @@ const userId = "22222222-2222-4222-8222-222222222222";
 const fileKey = `users/${userId}/documents/${documentId}.pdf`;
 const createdAt = new Date("2026-07-04T12:00:00.000Z");
 const config: DocumentConfig = {
+  chunkMaxTokens: 700,
+  chunkOverlapTokens: 80,
   maxFileSizeBytes: 1_000,
   processingAttempts: 3,
   processingQueue: "document-processing",
@@ -46,9 +48,11 @@ function createDocument(
   status: DocumentRecord["status"] = "uploading",
 ): DocumentRecord {
   return {
+    chapters: [],
     createdAt,
     fileKey,
     id: documentId,
+    pageCount: null,
     sizeBytes: 42,
     status,
     title: "Study guide",
@@ -65,7 +69,9 @@ function createRepository(): IDocumentRepository {
       status: "uploading",
     })),
     findOwnedById: vi.fn(async () => createDocument()),
+    markFailed: vi.fn(async () => true),
     markProcessing: vi.fn(async () => true),
+    replaceChunksAndMarkReady: vi.fn(async () => true),
   };
 }
 

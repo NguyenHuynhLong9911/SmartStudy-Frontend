@@ -5,9 +5,11 @@ import type { PrismaClient } from "../src/generated/prisma/client.js";
 
 const createdAt = new Date("2026-07-04T12:00:00.000Z");
 interface DatabaseStubDocument {
+  readonly chapters: unknown;
   readonly createdAt: Date;
   readonly fileKey: string;
   readonly id: string;
+  readonly pageCount: number | null;
   readonly sizeBytes: bigint | null;
   readonly status: string;
   readonly title: string;
@@ -15,9 +17,11 @@ interface DatabaseStubDocument {
 }
 
 const databaseDocument: DatabaseStubDocument = {
+  chapters: [],
   createdAt,
   fileKey: "users/user-1/documents/document-1.pdf",
   id: "document-1",
+  pageCount: null,
   sizeBytes: 42n,
   status: "uploading",
   title: "Study guide",
@@ -25,7 +29,21 @@ const databaseDocument: DatabaseStubDocument = {
 };
 
 function createPrismaStub() {
+  const transaction = {
+    $executeRaw: vi.fn(async () => 1),
+    document: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    documentChunk: {
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+  };
+
   return {
+    $transaction: vi.fn(async (callback: (tx: typeof transaction) => unknown) =>
+      callback(transaction),
+    ),
+    __transaction: transaction,
     document: {
       create: vi.fn(async (): Promise<DatabaseStubDocument> => databaseDocument),
       findFirst: vi.fn(
@@ -123,6 +141,153 @@ describe("PrismaDocumentRepository", () => {
     ).resolves.toBe(false);
   });
 
+  it("atomically marks processing documents as failed", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.markFailed("document-1", "user-1"),
+    ).resolves.toBe(true);
+    expect(prisma.document.updateMany).toHaveBeenCalledWith({
+      data: {
+        status: "failed",
+      },
+      where: {
+        deleted: false,
+        id: "document-1",
+        status: "processing",
+        userId: "user-1",
+      },
+    });
+
+    prisma.document.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(
+      repository.markFailed("document-1", "user-1"),
+    ).resolves.toBe(false);
+  });
+
+  it("replaces chunks and marks a processing document ready in one transaction", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.replaceChunksAndMarkReady({
+        chapters: [
+          {
+            chapterTitle: "Chapter 1 Basics",
+            endPage: 2,
+            startPage: 1,
+          },
+        ],
+        chunks: [
+          {
+            chapterTitle: "Chapter 1 Basics",
+            chunkText: "first chunk",
+            embedding: createEmbedding(0.1),
+            pageEnd: 1,
+            pageStart: 1,
+          },
+          {
+            chapterTitle: null,
+            chunkText: "second chunk",
+            embedding: createEmbedding(0.2),
+            pageEnd: 2,
+            pageStart: 2,
+          },
+        ],
+        documentId: "document-1",
+        pageCount: 2,
+        userId: "user-1",
+      }),
+    ).resolves.toBe(true);
+
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.__transaction.document.updateMany).toHaveBeenCalledWith({
+      data: {
+        chapters: [
+          {
+            chapter_title: "Chapter 1 Basics",
+            end_page: 2,
+            start_page: 1,
+          },
+        ],
+        pageCount: 2,
+        status: "ready",
+      },
+      where: {
+        deleted: false,
+        id: "document-1",
+        status: "processing",
+        userId: "user-1",
+      },
+    });
+    expect(prisma.__transaction.documentChunk.deleteMany).toHaveBeenCalledWith({
+      where: {
+        documentId: "document-1",
+      },
+    });
+    expect(prisma.__transaction.$executeRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not replace chunks if the document is no longer processing", async () => {
+    const prisma = createPrismaStub();
+    prisma.__transaction.document.updateMany.mockResolvedValueOnce({
+      count: 0,
+    });
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.replaceChunksAndMarkReady({
+        chapters: [],
+        chunks: [
+          {
+            chapterTitle: null,
+            chunkText: "chunk",
+            embedding: createEmbedding(0.1),
+            pageEnd: 1,
+            pageStart: 1,
+          },
+        ],
+        documentId: "document-1",
+        pageCount: 1,
+        userId: "user-1",
+      }),
+    ).resolves.toBe(false);
+    expect(prisma.__transaction.documentChunk.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.__transaction.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid vector dimensions before inserting chunks", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.replaceChunksAndMarkReady({
+        chapters: [],
+        chunks: [
+          {
+            chapterTitle: null,
+            chunkText: "chunk",
+            embedding: [0.1],
+            pageEnd: 1,
+            pageStart: 1,
+          },
+        ],
+        documentId: "document-1",
+        pageCount: 1,
+        userId: "user-1",
+      }),
+    ).rejects.toThrow(RangeError);
+  });
+
   it("rejects corrupt status and unsafe size values from the database", async () => {
     const prisma = createPrismaStub();
     const repository = new PrismaDocumentRepository(
@@ -163,3 +328,7 @@ describe("PrismaDocumentRepository", () => {
     });
   });
 });
+
+function createEmbedding(value: number): readonly number[] {
+  return Array.from({ length: 1024 }, () => value);
+}
