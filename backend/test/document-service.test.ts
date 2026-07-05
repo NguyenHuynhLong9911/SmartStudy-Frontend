@@ -69,9 +69,14 @@ function createRepository(): IDocumentRepository {
       status: "uploading",
     })),
     findOwnedById: vi.fn(async () => createDocument()),
+    listOwned: vi.fn(async () => ({
+      documents: [createDocument()],
+      total: 1,
+    })),
     markFailed: vi.fn(async () => true),
     markProcessing: vi.fn(async () => true),
     replaceChunksAndMarkReady: vi.fn(async () => true),
+    softDeleteOwned: vi.fn(async () => true),
   };
 }
 
@@ -340,5 +345,140 @@ describe("DocumentService", () => {
     await expect(service.completeUpload(documentId, userId)).rejects.toThrow(
       InvalidDocumentStateError,
     );
+  });
+
+  it("lists owned documents with trimmed search and pagination metadata", async () => {
+    vi.mocked(repository.listOwned).mockResolvedValueOnce({
+      documents: [
+        {
+          ...createDocument("ready"),
+          chapters: [
+            {
+              chapterTitle: "Chapter 1",
+              endPage: 3,
+              startPage: 1,
+            },
+          ],
+          pageCount: 3,
+        },
+      ],
+      total: 21,
+    });
+
+    await expect(
+      service.listDocuments({
+        limit: 10,
+        page: 2,
+        search: " Study ",
+        status: "ready",
+        userId,
+      }),
+    ).resolves.toEqual({
+      documents: [
+        {
+          createdAt,
+          id: documentId,
+          pageCount: 3,
+          sizeBytes: 42,
+          status: "ready",
+          title: "Study guide",
+        },
+      ],
+      pagination: {
+        limit: 10,
+        page: 2,
+        total: 21,
+        totalPages: 3,
+      },
+    });
+    expect(repository.listOwned).toHaveBeenCalledWith({
+      limit: 10,
+      page: 2,
+      search: "Study",
+      status: "ready",
+      userId,
+    });
+  });
+
+  it("returns document detail without exposing storage internals", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce({
+      ...createDocument("ready"),
+      chapters: [
+        {
+          chapterTitle: "Chapter 1",
+          endPage: 2,
+          startPage: 1,
+        },
+      ],
+      pageCount: 2,
+    });
+
+    await expect(service.getDocument(documentId, userId)).resolves.toEqual({
+      chapters: [
+        {
+          chapterTitle: "Chapter 1",
+          endPage: 2,
+          startPage: 1,
+        },
+      ],
+      createdAt,
+      id: documentId,
+      pageCount: 2,
+      sizeBytes: 42,
+      status: "ready",
+      title: "Study guide",
+    });
+  });
+
+  it("does not expose whether another user's detail exists", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce(null);
+
+    await expect(service.getDocument(documentId, userId)).rejects.toThrow(
+      DocumentNotFoundError,
+    );
+  });
+
+  it("deletes storage before soft-deleting the owned document", async () => {
+    await expect(
+      service.deleteDocument(documentId, userId),
+    ).resolves.toBeUndefined();
+    expect(storageProvider.delete).toHaveBeenCalledWith(fileKey);
+    expect(repository.softDeleteOwned).toHaveBeenCalledWith(documentId, userId);
+    expect(
+      vi.mocked(storageProvider.delete).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      vi.mocked(repository.softDeleteOwned).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it("soft-deletes when the storage object is already absent", async () => {
+    vi.mocked(storageProvider.delete).mockRejectedValueOnce(
+      new StorageObjectNotFoundError(fileKey),
+    );
+
+    await expect(
+      service.deleteDocument(documentId, userId),
+    ).resolves.toBeUndefined();
+    expect(repository.softDeleteOwned).toHaveBeenCalledWith(documentId, userId);
+  });
+
+  it("does not soft-delete when storage deletion fails", async () => {
+    const storageError = new Error("storage unavailable");
+    vi.mocked(storageProvider.delete).mockRejectedValueOnce(storageError);
+
+    await expect(service.deleteDocument(documentId, userId)).rejects.toBe(
+      storageError,
+    );
+    expect(repository.softDeleteOwned).not.toHaveBeenCalled();
+  });
+
+  it("does not delete storage for an unowned document", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce(null);
+
+    await expect(service.deleteDocument(documentId, userId)).rejects.toThrow(
+      DocumentNotFoundError,
+    );
+    expect(storageProvider.delete).not.toHaveBeenCalled();
+    expect(repository.softDeleteOwned).not.toHaveBeenCalled();
   });
 });

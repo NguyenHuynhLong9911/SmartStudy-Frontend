@@ -45,7 +45,11 @@ function createPrismaStub() {
     ),
     __transaction: transaction,
     document: {
+      count: vi.fn(async () => 1),
       create: vi.fn(async (): Promise<DatabaseStubDocument> => databaseDocument),
+      findMany: vi.fn(
+        async (): Promise<DatabaseStubDocument[]> => [databaseDocument],
+      ),
       findFirst: vi.fn(
         async (): Promise<DatabaseStubDocument | null> => databaseDocument,
       ),
@@ -114,6 +118,64 @@ describe("PrismaDocumentRepository", () => {
     ).resolves.toBeNull();
   });
 
+  it("lists only owned active documents with case-insensitive search", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.listOwned({
+        limit: 10,
+        page: 2,
+        search: "guide",
+        status: "ready",
+        userId: "user-1",
+      }),
+    ).resolves.toEqual({
+      documents: [
+        {
+          ...databaseDocument,
+          sizeBytes: 42,
+        },
+      ],
+      total: 1,
+    });
+    expect(prisma.document.findMany).toHaveBeenCalledWith({
+      orderBy: [
+        {
+          createdAt: "desc",
+        },
+        {
+          id: "desc",
+        },
+      ],
+      select: expect.any(Object),
+      skip: 10,
+      take: 10,
+      where: {
+        deleted: false,
+        status: "ready",
+        title: {
+          contains: "guide",
+          mode: "insensitive",
+        },
+        userId: "user-1",
+      },
+    });
+    expect(prisma.document.count).toHaveBeenCalledWith({
+      where: {
+        deleted: false,
+        status: "ready",
+        title: {
+          contains: "guide",
+          mode: "insensitive",
+        },
+        userId: "user-1",
+      },
+    });
+  });
+
   it("atomically transitions only owned uploading documents", async () => {
     const prisma = createPrismaStub();
     const repository = new PrismaDocumentRepository(
@@ -165,6 +227,32 @@ describe("PrismaDocumentRepository", () => {
     prisma.document.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(
       repository.markFailed("document-1", "user-1"),
+    ).resolves.toBe(false);
+  });
+
+  it("soft-deletes only active documents owned by the user", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    await expect(
+      repository.softDeleteOwned("document-1", "user-1"),
+    ).resolves.toBe(true);
+    expect(prisma.document.updateMany).toHaveBeenCalledWith({
+      data: {
+        deleted: true,
+      },
+      where: {
+        deleted: false,
+        id: "document-1",
+        userId: "user-1",
+      },
+    });
+
+    prisma.document.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(
+      repository.softDeleteOwned("document-1", "user-1"),
     ).resolves.toBe(false);
   });
 

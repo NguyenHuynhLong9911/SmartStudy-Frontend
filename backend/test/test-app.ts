@@ -22,6 +22,9 @@ export const testDocumentConfig: DocumentConfig = {
 export function createDocumentServiceStub(): IDocumentService {
   return {
     completeUpload: vi.fn(),
+    deleteDocument: vi.fn(),
+    getDocument: vi.fn(),
+    listDocuments: vi.fn(),
     requestUpload: vi.fn(),
   };
 }
