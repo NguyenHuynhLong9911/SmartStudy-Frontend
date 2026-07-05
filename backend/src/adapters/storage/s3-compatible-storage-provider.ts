@@ -3,18 +3,22 @@ import { Readable } from "node:stream";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
   type DeleteObjectCommandOutput,
   type GetObjectCommandOutput,
+  type HeadObjectCommandOutput,
   type PutObjectCommandOutput,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+import { StorageObjectNotFoundError } from "../../ports/index.js";
 import type {
   IStorageProvider,
   PresignedUpload,
+  StorageObjectMetadata,
   StorageUploadInput,
   StorageUploadUrlInput,
 } from "../../ports/index.js";
@@ -25,6 +29,7 @@ const MAX_PRESIGNED_URL_EXPIRES_SECONDS = 604_800;
 export interface S3ClientLike {
   send(command: DeleteObjectCommand): Promise<DeleteObjectCommandOutput>;
   send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
+  send(command: HeadObjectCommand): Promise<HeadObjectCommandOutput>;
   send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
 }
 
@@ -58,18 +63,24 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
     dependencies: S3CompatibleStorageProviderDependencies = {},
   ) {
     const s3Client = dependencies.client ?? createS3Client(config);
+    const presignClient =
+      !dependencies.client &&
+      config.publicEndpoint &&
+      config.publicEndpoint !== config.endpoint
+        ? createS3Client(config, config.publicEndpoint)
+        : s3Client;
 
     this.client = s3Client;
     this.createPresignedUrl =
       dependencies.createPresignedUrl ??
       (async (command, expiresInSeconds) => {
-        if (!(s3Client instanceof S3Client)) {
+        if (!(presignClient instanceof S3Client)) {
           throw new Error(
             "Default S3 presigner requires an AWS SDK S3Client instance",
           );
         }
 
-        return getSignedUrl(s3Client, command, {
+        return getSignedUrl(presignClient, command, {
           expiresIn: expiresInSeconds,
         });
       });
@@ -120,6 +131,35 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
     );
   }
 
+  async getMetadata(key: string): Promise<StorageObjectMetadata> {
+    assertStorageKey(key);
+
+    try {
+      const output = await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.config.bucket,
+          Key: key,
+        }),
+      );
+
+      return {
+        ...(output.ContentLength === undefined
+          ? {}
+          : { contentLength: output.ContentLength }),
+        ...(output.ContentType === undefined
+          ? {}
+          : { contentType: output.ContentType }),
+        ...(output.ETag === undefined ? {} : { etag: output.ETag }),
+      };
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new StorageObjectNotFoundError(key);
+      }
+
+      throw error;
+    }
+  }
+
   async getUploadUrl(input: StorageUploadUrlInput): Promise<PresignedUpload> {
     assertStorageKey(input.key);
     validateContentLength(input.contentLength);
@@ -163,11 +203,14 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
   }
 }
 
-function createS3Client(config: S3CompatibleStorageConfig): S3Client {
+function createS3Client(
+  config: S3CompatibleStorageConfig,
+  endpoint = config.endpoint,
+): S3Client {
   const clientConfig: S3ClientConfig = {
     forcePathStyle: config.forcePathStyle,
     region: config.region,
-    ...(config.endpoint ? { endpoint: config.endpoint } : {}),
+    ...(endpoint ? { endpoint } : {}),
     ...(config.accessKeyId && config.secretAccessKey
       ? {
           credentials: {
@@ -217,5 +260,30 @@ function isReadable(value: unknown): value is Readable {
       value !== null &&
       "pipe" in value &&
       typeof value.pipe === "function")
+  );
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  if (
+    "name" in error &&
+    (error.name === "NotFound" || error.name === "NoSuchKey")
+  ) {
+    return true;
+  }
+
+  if (!("$metadata" in error)) {
+    return false;
+  }
+
+  const metadata: unknown = error.$metadata;
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    "httpStatusCode" in metadata &&
+    metadata.httpStatusCode === 404
   );
 }

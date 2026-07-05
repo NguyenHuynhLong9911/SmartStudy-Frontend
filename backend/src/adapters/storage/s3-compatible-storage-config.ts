@@ -17,6 +17,9 @@ const storageEnvironmentSchema = z
     STORAGE_BUCKET: z.string().trim().min(1),
     STORAGE_ENDPOINT: optionalNonEmptyString.pipe(z.string().url().optional()),
     STORAGE_FORCE_PATH_STYLE: optionalBooleanString,
+    STORAGE_PUBLIC_ENDPOINT: optionalNonEmptyString.pipe(
+      z.string().url().optional(),
+    ),
     STORAGE_REGION: z.string().trim().min(1).default("us-east-1"),
     STORAGE_SECRET_KEY: optionalNonEmptyString,
     STORAGE_URL_EXPIRES_SECONDS: z.coerce
@@ -50,6 +53,7 @@ export interface S3CompatibleStorageConfig {
   readonly defaultUrlExpiresSeconds: number;
   readonly endpoint?: string;
   readonly forcePathStyle: boolean;
+  readonly publicEndpoint?: string;
   readonly region: string;
   readonly secretAccessKey?: string;
 }
@@ -69,6 +73,9 @@ export function loadS3CompatibleStorageConfig(
       ? { accessKeyId: parsed.STORAGE_ACCESS_KEY }
       : {}),
     ...(parsed.STORAGE_ENDPOINT ? { endpoint: parsed.STORAGE_ENDPOINT } : {}),
+    ...(parsed.STORAGE_PUBLIC_ENDPOINT
+      ? { publicEndpoint: parsed.STORAGE_PUBLIC_ENDPOINT }
+      : {}),
     ...(parsed.STORAGE_SECRET_KEY
       ? { secretAccessKey: parsed.STORAGE_SECRET_KEY }
       : {}),

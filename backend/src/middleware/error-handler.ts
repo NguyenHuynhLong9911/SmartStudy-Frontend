@@ -2,6 +2,7 @@ import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
 
 import { AuthError } from "../modules/auth/auth-errors.js";
+import { DocumentError } from "../modules/documents/document-errors.js";
 
 export const errorHandler: ErrorRequestHandler = (
   error: unknown,
@@ -26,6 +27,16 @@ export const errorHandler: ErrorRequestHandler = (
   }
 
   if (error instanceof AuthError) {
+    response.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    });
+    return;
+  }
+
+  if (error instanceof DocumentError) {
     response.status(error.statusCode).json({
       error: {
         code: error.code,

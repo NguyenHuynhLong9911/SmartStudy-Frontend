@@ -1,13 +1,13 @@
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createApp } from "../src/app.js";
 import { InvalidCredentialsError } from "../src/modules/auth/auth-errors.js";
 import type {
   AuthSession,
   AuthTokens,
   IAuthProvider,
 } from "../src/ports/index.js";
+import { createTestApp } from "./test-app.js";
 
 const tokens: AuthTokens = {
   accessToken: "access-token",
@@ -48,7 +48,7 @@ describe("auth HTTP routes", () => {
   });
 
   it("registers a valid user", async () => {
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/register")
       .send({
         email: " student@example.com ",
@@ -66,7 +66,7 @@ describe("auth HTTP routes", () => {
   });
 
   it("rejects invalid register input before calling the provider", async () => {
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/register")
       .send({ email: "not-an-email", password: "short" });
 
@@ -81,7 +81,7 @@ describe("auth HTTP routes", () => {
       new InvalidCredentialsError(),
     );
 
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/login")
       .send({ email: "student@example.com", password: "wrong-password" });
 
@@ -95,7 +95,7 @@ describe("auth HTTP routes", () => {
   });
 
   it("refreshes a session", async () => {
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/refresh")
       .send({ refreshToken: "refresh-token" });
 
@@ -105,7 +105,7 @@ describe("auth HTTP routes", () => {
   });
 
   it("revokes a session on logout", async () => {
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/logout")
       .send({ refreshToken: "refresh-token" });
 
@@ -120,7 +120,7 @@ describe("auth HTTP routes", () => {
       new Error("database unavailable"),
     );
 
-    const response = await request(createApp({ authProvider }))
+    const response = await request(createTestApp(authProvider))
       .post("/api/v1/auth/refresh")
       .send({ refreshToken: "refresh-token" });
 
