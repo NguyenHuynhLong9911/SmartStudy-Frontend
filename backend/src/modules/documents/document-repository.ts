@@ -46,6 +46,19 @@ export interface CompleteDocumentProcessingInput {
   readonly userId: string;
 }
 
+export interface ListOwnedDocumentsInput {
+  readonly limit: number;
+  readonly page: number;
+  readonly search?: string;
+  readonly status?: DocumentStatus;
+  readonly userId: string;
+}
+
+export interface ListOwnedDocumentsResult {
+  readonly documents: readonly DocumentRecord[];
+  readonly total: number;
+}
+
 export interface IDocumentRepository {
   createUploading(
     input: CreateUploadingDocumentInput,
@@ -54,9 +67,13 @@ export interface IDocumentRepository {
     documentId: string,
     userId: string,
   ): Promise<DocumentRecord | null>;
+  listOwned(
+    input: ListOwnedDocumentsInput,
+  ): Promise<ListOwnedDocumentsResult>;
   markFailed(documentId: string, userId: string): Promise<boolean>;
   markProcessing(documentId: string, userId: string): Promise<boolean>;
   replaceChunksAndMarkReady(
     input: CompleteDocumentProcessingInput,
   ): Promise<boolean>;
+  softDeleteOwned(documentId: string, userId: string): Promise<boolean>;
 }

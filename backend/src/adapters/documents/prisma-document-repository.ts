@@ -7,6 +7,8 @@ import type {
   DocumentRecord,
   DocumentStatus,
   IDocumentRepository,
+  ListOwnedDocumentsInput,
+  ListOwnedDocumentsResult,
 } from "../../modules/documents/document-repository.js";
 
 const documentSelection = {
@@ -56,6 +58,46 @@ export class PrismaDocumentRepository implements IDocumentRepository {
     });
 
     return document ? mapDocument(document) : null;
+  }
+
+  async listOwned(
+    input: ListOwnedDocumentsInput,
+  ): Promise<ListOwnedDocumentsResult> {
+    const where: Prisma.DocumentWhereInput = {
+      deleted: false,
+      userId: input.userId,
+      ...(input.search
+        ? {
+            title: {
+              contains: input.search,
+              mode: "insensitive",
+            },
+          }
+        : {}),
+      ...(input.status ? { status: input.status } : {}),
+    };
+    const [documents, total] = await Promise.all([
+      this.prisma.document.findMany({
+        orderBy: [
+          {
+            createdAt: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+        select: documentSelection,
+        skip: (input.page - 1) * input.limit,
+        take: input.limit,
+        where,
+      }),
+      this.prisma.document.count({ where }),
+    ]);
+
+    return {
+      documents: documents.map(mapDocument),
+      total,
+    };
   }
 
   async markFailed(documentId: string, userId: string): Promise<boolean> {
@@ -144,6 +186,24 @@ export class PrismaDocumentRepository implements IDocumentRepository {
 
       return true;
     });
+  }
+
+  async softDeleteOwned(
+    documentId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const result = await this.prisma.document.updateMany({
+      data: {
+        deleted: true,
+      },
+      where: {
+        deleted: false,
+        id: documentId,
+        userId,
+      },
+    });
+
+    return result.count === 1;
   }
 }
 

@@ -74,6 +74,12 @@ bằng `pdf-parse`, phát hiện heading chương cơ bản, chunk text theo
 `document_chunks`. PDF không có text extractable sẽ được đánh dấu `failed`; xử lý
 thành công sẽ chuyển document sang `ready`.
 
+Quản lý tài liệu dùng Bearer access token:
+
+- `GET /api/v1/documents` hỗ trợ `search`, `status`, `page`, `limit`.
+- `GET /api/v1/documents/{documentId}` trả metadata, số trang và danh sách chương.
+- `DELETE /api/v1/documents/{documentId}` xóa object storage và soft-delete record.
+
 Dừng service nhưng giữ dữ liệu:
 
 ```bash

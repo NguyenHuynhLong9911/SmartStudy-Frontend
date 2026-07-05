@@ -15,6 +15,7 @@ import {
   UploadNotFoundError,
 } from "./document-errors.js";
 import type {
+  DocumentChapter,
   DocumentRecord,
   DocumentStatus,
   IDocumentRepository,
@@ -35,6 +36,33 @@ export interface DocumentSummary {
   readonly title: string;
 }
 
+export interface DocumentDetail extends DocumentSummary {
+  readonly chapters: readonly DocumentChapter[];
+  readonly pageCount: number | null;
+}
+
+export interface DocumentListItem extends DocumentSummary {
+  readonly pageCount: number | null;
+}
+
+export interface ListDocumentsInput {
+  readonly limit: number;
+  readonly page: number;
+  readonly search?: string;
+  readonly status?: DocumentStatus;
+  readonly userId: string;
+}
+
+export interface ListDocumentsResult {
+  readonly documents: readonly DocumentListItem[];
+  readonly pagination: {
+    readonly limit: number;
+    readonly page: number;
+    readonly total: number;
+    readonly totalPages: number;
+  };
+}
+
 export interface DocumentUploadResult {
   readonly document: DocumentSummary;
   readonly upload: PresignedUpload;
@@ -51,6 +79,9 @@ export interface IDocumentService {
     documentId: string,
     userId: string,
   ): Promise<DocumentSummary>;
+  deleteDocument(documentId: string, userId: string): Promise<void>;
+  getDocument(documentId: string, userId: string): Promise<DocumentDetail>;
+  listDocuments(input: ListDocumentsInput): Promise<ListDocumentsResult>;
   requestUpload(
     input: RequestDocumentUploadInput,
   ): Promise<DocumentUploadResult>;
@@ -156,6 +187,61 @@ export class DocumentService implements IDocumentService {
     return toDocumentSummary(document);
   }
 
+  async deleteDocument(documentId: string, userId: string): Promise<void> {
+    const document = await this.repository.findOwnedById(documentId, userId);
+
+    if (!document) {
+      throw new DocumentNotFoundError();
+    }
+
+    try {
+      await this.storageProvider.delete(document.fileKey);
+    } catch (error) {
+      if (!(error instanceof StorageObjectNotFoundError)) {
+        throw error;
+      }
+    }
+
+    await this.repository.softDeleteOwned(documentId, userId);
+  }
+
+  async getDocument(
+    documentId: string,
+    userId: string,
+  ): Promise<DocumentDetail> {
+    const document = await this.repository.findOwnedById(documentId, userId);
+
+    if (!document) {
+      throw new DocumentNotFoundError();
+    }
+
+    return toDocumentDetail(document);
+  }
+
+  async listDocuments(
+    input: ListDocumentsInput,
+  ): Promise<ListDocumentsResult> {
+    const search = input.search?.trim();
+    const result = await this.repository.listOwned({
+      limit: input.limit,
+      page: input.page,
+      userId: input.userId,
+      ...(search ? { search } : {}),
+      ...(input.status ? { status: input.status } : {}),
+    });
+
+    return {
+      documents: result.documents.map(toDocumentListItem),
+      pagination: {
+        limit: input.limit,
+        page: input.page,
+        total: result.total,
+        totalPages:
+          result.total === 0 ? 0 : Math.ceil(result.total / input.limit),
+      },
+    };
+  }
+
   private async verifyUploadedObject(document: DocumentRecord): Promise<void> {
     let metadata;
 
@@ -218,5 +304,20 @@ function toDocumentSummary(document: DocumentRecord): DocumentSummary {
     sizeBytes: document.sizeBytes,
     status: document.status,
     title: document.title,
+  };
+}
+
+function toDocumentDetail(document: DocumentRecord): DocumentDetail {
+  return {
+    ...toDocumentSummary(document),
+    chapters: document.chapters,
+    pageCount: document.pageCount,
+  };
+}
+
+function toDocumentListItem(document: DocumentRecord): DocumentListItem {
+  return {
+    ...toDocumentSummary(document),
+    pageCount: document.pageCount,
   };
 }

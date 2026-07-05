@@ -63,6 +63,26 @@ describe("document HTTP routes", () => {
       },
     });
     vi.mocked(documentService.completeUpload).mockResolvedValue(document);
+    vi.mocked(documentService.deleteDocument).mockResolvedValue();
+    vi.mocked(documentService.getDocument).mockResolvedValue({
+      ...document,
+      chapters: [],
+      pageCount: null,
+    });
+    vi.mocked(documentService.listDocuments).mockResolvedValue({
+      documents: [
+        {
+          ...document,
+          pageCount: null,
+        },
+      ],
+      pagination: {
+        limit: 20,
+        page: 1,
+        total: 1,
+        totalPages: 1,
+      },
+    });
   });
 
   it("creates an authenticated presigned upload request", async () => {
@@ -233,5 +253,172 @@ describe("document HTTP routes", () => {
     expect(invalidId.status).toBe(400);
     expect(unexpectedBody.status).toBe(400);
     expect(documentService.completeUpload).not.toHaveBeenCalled();
+  });
+
+  it("lists owned documents with validated search filters and pagination", async () => {
+    vi.mocked(documentService.listDocuments).mockResolvedValueOnce({
+      documents: [
+        {
+          ...document,
+          pageCount: 4,
+          status: "ready",
+        },
+      ],
+      pagination: {
+        limit: 10,
+        page: 2,
+        total: 11,
+        totalPages: 2,
+      },
+    });
+
+    const response = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .get("/api/v1/documents")
+      .query({
+        limit: 10,
+        page: 2,
+        search: " Study ",
+        status: "ready",
+      })
+      .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.documents[0]).toMatchObject({
+      id: documentId,
+      pageCount: 4,
+      status: "ready",
+    });
+    expect(response.body.pagination).toEqual({
+      limit: 10,
+      page: 2,
+      total: 11,
+      totalPages: 2,
+    });
+    expect(documentService.listDocuments).toHaveBeenCalledWith({
+      limit: 10,
+      page: 2,
+      search: "Study",
+      status: "ready",
+      userId,
+    });
+  });
+
+  it("uses list pagination defaults and omits an empty search", async () => {
+    const response = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .get("/api/v1/documents")
+      .query({
+        search: " ",
+      })
+      .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(200);
+    expect(documentService.listDocuments).toHaveBeenCalledWith({
+      limit: 20,
+      page: 1,
+      userId,
+    });
+  });
+
+  it.each([
+    { limit: 0 },
+    { limit: 101 },
+    { page: 0 },
+    { status: "unknown" },
+    { unexpected: true },
+  ])("rejects invalid document list query %#", async (query) => {
+    const response = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .get("/api/v1/documents")
+      .query(query)
+      .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(documentService.listDocuments).not.toHaveBeenCalled();
+  });
+
+  it("returns owned document detail", async () => {
+    const response = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .get(`/api/v1/documents/${documentId}`)
+      .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.document).toMatchObject({
+      chapters: [],
+      id: documentId,
+      pageCount: null,
+    });
+    expect(documentService.getDocument).toHaveBeenCalledWith(
+      documentId,
+      userId,
+    );
+  });
+
+  it("soft-deletes an owned document", async () => {
+    const response = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .delete(`/api/v1/documents/${documentId}`)
+      .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(204);
+    expect(response.text).toBe("");
+    expect(documentService.deleteDocument).toHaveBeenCalledWith(
+      documentId,
+      userId,
+    );
+  });
+
+  it.each([
+    {
+      method: "get" as const,
+      serviceMethod: "getDocument" as const,
+    },
+    {
+      method: "delete" as const,
+      serviceMethod: "deleteDocument" as const,
+    },
+  ])("maps not-found for document $method", async ({ method, serviceMethod }) => {
+    vi.mocked(documentService[serviceMethod]).mockRejectedValueOnce(
+      new DocumentNotFoundError(),
+    );
+
+    const appRequest = request(createTestApp(authProvider, documentService));
+    const response =
+      method === "get"
+        ? await appRequest
+            .get(`/api/v1/documents/${documentId}`)
+            .set("Authorization", "Bearer access-token")
+        : await appRequest
+            .delete(`/api/v1/documents/${documentId}`)
+            .set("Authorization", "Bearer access-token");
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("DOCUMENT_NOT_FOUND");
+  });
+
+  it("rejects invalid ids for detail and delete", async () => {
+    const detail = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .get("/api/v1/documents/not-a-uuid")
+      .set("Authorization", "Bearer access-token");
+    const deletion = await request(
+      createTestApp(authProvider, documentService),
+    )
+      .delete("/api/v1/documents/not-a-uuid")
+      .set("Authorization", "Bearer access-token");
+
+    expect(detail.status).toBe(400);
+    expect(deletion.status).toBe(400);
+    expect(documentService.getDocument).not.toHaveBeenCalled();
+    expect(documentService.deleteDocument).not.toHaveBeenCalled();
   });
 });

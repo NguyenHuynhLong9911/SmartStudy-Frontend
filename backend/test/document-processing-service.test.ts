@@ -65,9 +65,14 @@ function createRepository(): IDocumentRepository {
   return {
     createUploading: vi.fn(async () => createDocument("uploading")),
     findOwnedById: vi.fn(async () => createDocument()),
+    listOwned: vi.fn(async () => ({
+      documents: [createDocument()],
+      total: 1,
+    })),
     markFailed: vi.fn(async () => true),
     markProcessing: vi.fn(async () => true),
     replaceChunksAndMarkReady: vi.fn(async () => true),
+    softDeleteOwned: vi.fn(async () => true),
   };
 }
 
