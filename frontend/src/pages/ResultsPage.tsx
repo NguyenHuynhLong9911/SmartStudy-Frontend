@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Award, Sparkles, RefreshCw, BookOpen } from 'lucide-react';
 import { Button, Card, AiFeedbackCard } from '../components';
-import { GradingResult, ExamQuestion } from '../types';
+import { GradingResult, ExamQuestion, ExamAttempt } from '../types';
 
 export const ResultsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -14,8 +14,41 @@ export const ResultsPage: React.FC = () => {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setResult(parsed.result);
-        setQuestions(parsed.questions || []);
+
+        // New format: { attempt: ExamAttempt, questions: ExamQuestion[] }
+        if (parsed.attempt) {
+          const attempt = parsed.attempt as ExamAttempt;
+          const rawQuestions = parsed.questions as ExamQuestion[] || [];
+          setQuestions(rawQuestions);
+
+          // Convert ExamAttempt to GradingResult for AiFeedbackCard compatibility
+          if (attempt.detailedResult) {
+            const details = attempt.detailedResult.map((d, idx) => {
+              const q = rawQuestions[idx] || null;
+              const opts = q?.options || [];
+              const userOptIdx = opts.indexOf(d.selected_answer);
+              const correctOptIdx = opts.indexOf(d.correct_answer);
+              return {
+                questionId: d.question_id,
+                userOption: userOptIdx >= 0 ? userOptIdx : 0,
+                correctOption: correctOptIdx >= 0 ? correctOptIdx : 0,
+                isCorrect: d.is_correct,
+                explanationForWrong: !d.is_correct ? d.explanation : undefined,
+              };
+            });
+            setResult({
+              attemptId: attempt.id,
+              score: attempt.score ?? 0,
+              totalPoints: attempt.maxScore ?? rawQuestions.length,
+              details,
+              aiFeedback: attempt.aiFeedback || undefined,
+            });
+          }
+        } else if (parsed.result) {
+          // Legacy format: { result: GradingResult, questions: ExamQuestion[] }
+          setResult(parsed.result);
+          setQuestions(parsed.questions || []);
+        }
       } catch {
         // Ignore JSON parse errors for corrupted storage
       }

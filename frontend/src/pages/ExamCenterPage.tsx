@@ -29,7 +29,7 @@ export const ExamCenterPage: React.FC = () => {
   // Active Exam / Quiz State
   const [activeExam, setActiveExam] = useState<Exam | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  const [userAnswers, setUserAnswers] = useState<Record<string, number>>({});
+  const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -86,7 +86,7 @@ export const ExamCenterPage: React.FC = () => {
     if (!selectedDocId) return;
     setIsGenerating(true);
     try {
-      const exam = await examService.generateExam('Đề thi Khảo thí AI (100% Coverage)', selectedDocId, numQuestions, durationMinutes);
+      const exam = await examService.generateExam(selectedDocId, numQuestions, durationMinutes);
       setActiveExam(exam);
       setActiveQuiz(null);
       setUserAnswers({});
@@ -96,8 +96,8 @@ export const ExamCenterPage: React.FC = () => {
     }
   };
 
-  const handleOptionSelect = (questionId: string, optionIdx: number) => {
-    setUserAnswers((prev) => ({ ...prev, [questionId]: optionIdx }));
+  const handleOptionSelect = (questionId: string, selectedOption: string) => {
+    setUserAnswers((prev) => ({ ...prev, [questionId]: selectedOption }));
   };
 
   const handleSubmitExam = async () => {
@@ -105,49 +105,33 @@ export const ExamCenterPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       if (activeExam) {
-        const attempt = await examService.submitAttempt(activeExam.id, userAnswers);
-        // Navigate to results page with grading result via router state or local storage
+        // Convert userAnswers {question_id: selectedOptionText} to API format
+        const answers = Object.entries(userAnswers).map(([question_id, selected_answer]) => ({
+          question_id,
+          selected_answer,
+        }));
+        const attempt = await examService.submitAttempt(activeExam.id, answers);
+        // Navigate to results page with attempt data
         localStorage.setItem('last_grading_result', JSON.stringify({
-          result: attempt.result,
+          attempt,
           questions: activeExam.questions,
         }));
         navigate('/results');
       } else if (activeQuiz) {
-        // Convert quiz to grading format and show results
-        const details = activeQuiz.questions.map((q) => {
-          const userOpt = userAnswers[q.id] ?? 0;
-          const isCorrect = userOpt === q.correctOptionIndex;
-          return {
-            questionId: q.id,
-            userOption: userOpt,
-            correctOption: q.correctOptionIndex,
-            isCorrect,
-            explanationForWrong: isCorrect ? undefined : q.explanation || 'Đáp án chưa chính xác theo ngữ cảnh PDF.',
-          };
-        });
-        const correctCount = details.filter((d) => d.isCorrect).length;
-        const totalPoints = activeQuiz.questions.length * 10;
-        const score = correctCount * 10;
-
+        // Submit quiz via API
+        const answers = Object.entries(userAnswers).map(([question_id, selected_answer]) => ({
+          question_id,
+          selected_answer,
+        }));
+        const attempt = await examService.submitQuizAttempt(activeQuiz.id, answers);
         localStorage.setItem('last_grading_result', JSON.stringify({
-          result: {
-            attemptId: 'att-quiz-' + Date.now(),
-            score,
-            totalPoints,
-            details,
-            aiFeedback: score >= totalPoints * 0.8
-              ? '🎉 Tuyệt vời! Bạn nắm vững hầu hết các khái niệm trong bài trắc nghiệm.'
-              : '💡 Hãy xem lại phần giải thích chi tiết cho từng câu sai bên dưới và hỏi Gia sư AI nếu cần.',
-          },
-          questions: activeQuiz.questions.map((q) => ({
-            id: q.id,
-            questionText: q.questionText,
-            options: q.options,
-            points: 10,
-          })),
+          attempt,
+          questions: activeQuiz.questions,
         }));
         navigate('/results');
       }
+    } catch {
+      alert('Nộp bài thất bại. Vui lòng thử lại.');
     } finally {
       setIsSubmitting(false);
     }
@@ -316,7 +300,7 @@ export const ExamCenterPage: React.FC = () => {
           </Button>
           <div>
             <h3 className="font-bold text-base text-[#181C1E]">
-              {activeExam ? activeExam.title : activeQuiz ? activeQuiz.title : 'Bài kiểm tra'}
+              {activeExam ? `Đề thi #${activeExam.id.slice(0, 8)}` : activeQuiz ? `Quiz #${activeQuiz.id.slice(0, 8)}` : 'Bài kiểm tra'}
             </h3>
             <p className="text-xs text-[#707882]">Đã trả lời: {answeredCount} / {currentQuestions.length} câu</p>
           </div>
@@ -361,27 +345,29 @@ export const ExamCenterPage: React.FC = () => {
       {/* Questions List */}
       <div className="space-y-6">
         {currentQuestions.map((q, qIdx) => {
-          const selectedOpt = userAnswers[q.id];
+          const qId = q.question_id || q.id || String(qIdx);
+          const qText = q.question_text || q.questionText || '';
+          const selectedOpt = userAnswers[qId];
           return (
-            <Card key={q.id} className="p-6 space-y-4">
+            <Card key={qId} className="p-6 space-y-4">
               <div className="flex items-start gap-3">
                 <span className="w-7 h-7 rounded-full bg-[#D0E4FF] text-[#00497A] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                   {qIdx + 1}
                 </span>
                 <h4 className="font-bold text-sm text-[#181C1E] leading-relaxed flex-1">
-                  {q.questionText}
+                  {qText}
                 </h4>
               </div>
 
               {/* Options Grid */}
               <div className="grid grid-cols-1 gap-2.5 pl-10">
                 {q.options.map((optionText, optIdx) => {
-                  const isSelected = selectedOpt === optIdx;
+                  const isSelected = selectedOpt === optionText;
                   return (
                     <button
                       key={optIdx}
                       type="button"
-                      onClick={() => handleOptionSelect(q.id, optIdx)}
+                      onClick={() => handleOptionSelect(qId, optionText)}
                       className={clsx(
                         'w-full text-left p-3.5 rounded-xl font-medium text-xs border transition-all flex items-center gap-3 cursor-pointer',
                         isSelected

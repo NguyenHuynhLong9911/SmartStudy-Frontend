@@ -125,8 +125,23 @@ export const LearningSpacePage: React.FC = () => {
     if (!selectedDocId) return;
     setIsLoadingSummary(true);
     try {
-      const res = await summaryService.getSummary(selectedDocId, type, chapterIdx);
+      // Use generateSummary (POST) which triggers LLM generation
+      const chapterRef = type === 'CHAPTER' ? `Chapter ${chapterIdx + 1}` : undefined;
+      const res = await summaryService.generateSummary(
+        selectedDocId,
+        type === 'FULL' ? 'full' : 'chapter',
+        chapterRef,
+      );
       setSummary(res);
+    } catch {
+      // If POST fails (already exists), try GET
+      try {
+        const chapterRef = type === 'CHAPTER' ? `Chapter ${chapterIdx + 1}` : undefined;
+        const res = await summaryService.getSummary(selectedDocId, type, chapterRef);
+        setSummary(res);
+      } catch {
+        // Summary not available yet
+      }
     } finally {
       setIsLoadingSummary(false);
     }
@@ -395,15 +410,30 @@ export const LearningSpacePage: React.FC = () => {
                 <div className="flex items-center justify-between border-b border-[#E0E3E5] pb-4">
                   <h4 className="font-bold text-base text-[#181C1E] flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-[#8A2BE2]" />
-                    <span>{summary.chapterTitle || 'Bản tóm tắt toàn diện tài liệu'}</span>
+                    <span>{summary.chapterRef || summary.chapterTitle || 'Bản tóm tắt toàn diện tài liệu'}</span>
                   </h4>
                   <Badge variant="ai" size="sm">Map-Reduce Engine</Badge>
                 </div>
 
+                {/* Key Points */}
+                {summary.keyPoints && summary.keyPoints.length > 0 && (
+                  <div className="p-4 rounded-xl bg-[#D0E4FF]/30 border border-[#0073BB]/20">
+                    <p className="font-bold text-xs text-[#0073BB] mb-2">📌 Điểm chính:</p>
+                    <ul className="space-y-1">
+                      {summary.keyPoints.map((kp, i) => (
+                        <li key={i} className="text-xs text-[#232F3E] flex items-start gap-2">
+                          <span className="text-[#0073BB] font-bold shrink-0">{i + 1}.</span>
+                          <span>{kp}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 <div
                   className="space-y-3 text-xs leading-relaxed text-[#404751] whitespace-pre-wrap"
                   dangerouslySetInnerHTML={{
-                    __html: summary.content
+                    __html: (summary.summaryText || summary.content || summary.summary || '')
                       .replace(/### (.*?)\n/g, '<h5 class="font-bold text-sm text-[#232F3E] mt-4 mb-2">$1</h5>')
                       .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-[#181C1E]">$1</strong>'),
                   }}

@@ -19,9 +19,9 @@ export const WelcomePage: React.FC = () => {
   const navigate = useNavigate();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('student@smartstudy.ai');
-  const [password, setPassword] = useState('12345678');
-  const [name, setName] = useState('Học viên SmartStudy');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -36,8 +36,16 @@ export const WelcomePage: React.FC = () => {
         await authService.register(email, password, name);
       }
       navigate('/dashboard');
-    } catch {
-      setError('Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+      const serverMsg = axiosErr?.response?.data?.error?.message;
+      if (authMode === 'register' && serverMsg?.includes('12')) {
+        setError('Mật khẩu phải có ít nhất 12 ký tự.');
+      } else if (serverMsg?.includes('already')) {
+        setError('Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.');
+      } else {
+        setError(serverMsg || (authMode === 'login' ? 'Email hoặc mật khẩu không đúng.' : 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin.'));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -260,13 +268,14 @@ export const WelcomePage: React.FC = () => {
             required
           />
           <Input
-            label="Mật khẩu"
+            label={authMode === 'register' ? 'Mật khẩu (tối thiểu 12 ký tự)' : 'Mật khẩu'}
             type="password"
-            placeholder="••••••••"
+            placeholder={authMode === 'register' ? 'Nhập mật khẩu (≥ 12 ký tự)' : '••••••••'}
             leftIcon={<Lock size={16} />}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={authMode === 'register' ? 12 : 1}
           />
 
           {error && <div className="p-3 rounded-lg bg-[#FFDAD6] text-[#93000A] text-xs font-medium">{error}</div>}

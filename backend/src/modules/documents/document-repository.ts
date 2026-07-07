@@ -18,6 +18,14 @@ export interface DocumentChunkInput {
   readonly pageStart: number;
 }
 
+export interface DocumentChunkRecord {
+  readonly chapterTitle: string | null;
+  readonly chunkText: string;
+  readonly id: string;
+  readonly pageEnd: number | null;
+  readonly pageStart: number | null;
+}
+
 export interface DocumentRecord {
   readonly chapters: readonly DocumentChapter[];
   readonly createdAt: Date;
@@ -67,6 +75,11 @@ export interface IDocumentRepository {
     documentId: string,
     userId: string,
   ): Promise<DocumentRecord | null>;
+  listChunks(
+    documentId: string,
+    userId: string,
+    chapterTitle?: string,
+  ): Promise<readonly DocumentChunkRecord[]>;
   listOwned(
     input: ListOwnedDocumentsInput,
   ): Promise<ListOwnedDocumentsResult>;
@@ -77,3 +90,4 @@ export interface IDocumentRepository {
   ): Promise<boolean>;
   softDeleteOwned(documentId: string, userId: string): Promise<boolean>;
 }
+

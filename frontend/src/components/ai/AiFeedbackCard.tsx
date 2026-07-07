@@ -59,8 +59,12 @@ export const AiFeedbackCard: React.FC<AiFeedbackCardProps> = ({
 
         <div className="grid grid-cols-1 gap-4">
           {result.details.map((detail, idx) => {
-            const question = questions.find((q) => q.id === detail.questionId) || questions[idx];
+            const question = questions.find((q) => {
+              const qId = q.question_id || q.id;
+              return qId === detail.questionId;
+            }) || questions[idx];
             if (!question) return null;
+            const qText = question.question_text || question.questionText || '';
 
             return (
               <Card
@@ -81,7 +85,7 @@ export const AiFeedbackCard: React.FC<AiFeedbackCardProps> = ({
                       {idx + 1}
                     </span>
                     <div>
-                      <p className="font-semibold text-sm text-[#181C1E]">{question.questionText}</p>
+                      <p className="font-semibold text-sm text-[#181C1E]">{qText}</p>
                       <div className="flex flex-wrap items-center gap-4 mt-2 text-xs">
                         <span className={clsx('font-medium', detail.isCorrect ? 'text-emerald-700' : 'text-[#BA1A1A]')}>
                           Lựa chọn của bạn: {question.options[detail.userOption] || `Đáp án ${detail.userOption + 1}`}
@@ -116,7 +120,7 @@ export const AiFeedbackCard: React.FC<AiFeedbackCardProps> = ({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onReviewTutor(question.questionText, detail.explanationForWrong)}
+                        onClick={() => onReviewTutor(qText, detail.explanationForWrong)}
                         className="text-[#8A2BE2] hover:bg-[#8A2BE2]/10 text-xs shrink-0"
                         rightIcon={<ArrowRight size={14} />}
                       >

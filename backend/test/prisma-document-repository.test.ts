@@ -55,6 +55,17 @@ function createPrismaStub() {
       ),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    documentChunk: {
+      findMany: vi.fn(async () => [
+        {
+          chapterTitle: "Intro",
+          chunkText: "Hello world",
+          id: "chunk-1",
+          pageEnd: 2,
+          pageStart: 1,
+        },
+      ]),
+    },
   };
 }
 
@@ -414,6 +425,51 @@ describe("PrismaDocumentRepository", () => {
     ).resolves.toMatchObject({
       sizeBytes: null,
     });
+  });
+
+  it("lists document chunks when owned by user", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+
+    const chunks = await repository.listChunks("document-1", "user-1", "Intro");
+    expect(chunks).toEqual([
+      {
+        chapterTitle: "Intro",
+        chunkText: "Hello world",
+        id: "chunk-1",
+        pageEnd: 2,
+        pageStart: 1,
+      },
+    ]);
+    expect(prisma.document.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { deleted: false, id: "document-1", userId: "user-1" },
+    });
+    expect(prisma.documentChunk.findMany).toHaveBeenCalledWith({
+      orderBy: [{ pageStart: "asc" }, { id: "asc" }],
+      select: {
+        chapterTitle: true,
+        chunkText: true,
+        id: true,
+        pageEnd: true,
+        pageStart: true,
+      },
+      where: { chapterTitle: "Intro", documentId: "document-1" },
+    });
+  });
+
+  it("returns empty chunks when document is not owned", async () => {
+    const prisma = createPrismaStub();
+    const repository = new PrismaDocumentRepository(
+      prisma as unknown as PrismaClient,
+    );
+    prisma.document.findFirst.mockResolvedValueOnce(null);
+
+    const chunks = await repository.listChunks("document-1", "other-user");
+    expect(chunks).toEqual([]);
+    expect(prisma.documentChunk.findMany).not.toHaveBeenCalled();
   });
 });
 

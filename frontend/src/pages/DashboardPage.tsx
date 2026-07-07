@@ -27,6 +27,7 @@ export const DashboardPage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [docTitle, setDocTitle] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = async () => {
@@ -57,12 +58,17 @@ export const DashboardPage: React.FC = () => {
     e.preventDefault();
     if (!selectedFile) return;
     setIsUploading(true);
+    setUploadError('');
     try {
       const newDoc = await documentService.uploadDocument(selectedFile, docTitle);
       setDocuments((prev) => [newDoc, ...prev]);
       setIsUploadModalOpen(false);
       setSelectedFile(null);
       setDocTitle('');
+      setUploadError('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Tải lên thất bại. Vui lòng thử lại.';
+      setUploadError(msg);
     } finally {
       setIsUploading(false);
     }
@@ -196,13 +202,13 @@ export const DashboardPage: React.FC = () => {
                       <FileText size={20} />
                     </div>
                     <div className="flex items-center gap-2">
-                      {doc.status === 'READY' ? (
+                      {doc.status === 'ready' ? (
                         <Badge variant="success" size="sm">
                           <CheckCircle2 size={12} className="mr-1" /> Sẵn sàng
                         </Badge>
-                      ) : doc.status === 'PROCESSING' ? (
+                      ) : doc.status === 'processing' || doc.status === 'uploading' ? (
                         <Badge variant="warning" size="sm">
-                          <Clock size={12} className="mr-1 animate-spin" /> Đang bóc tách
+                          <Clock size={12} className="mr-1 animate-spin" /> Đang xử lý
                         </Badge>
                       ) : (
                         <Badge variant="error" size="sm">
@@ -320,11 +326,17 @@ export const DashboardPage: React.FC = () => {
             <p>2. Worker bóc tách văn bản, chia nhỏ theo câu và tạo nhúng HNSW pgvector.</p>
           </div>
 
+          {uploadError && (
+            <div className="p-3 rounded-lg bg-[#FFDAD6] text-[#93000A] text-xs font-medium">
+              {uploadError}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsUploadModalOpen(false)}
+              onClick={() => { setIsUploadModalOpen(false); setUploadError(''); }}
               disabled={isUploading}
             >
               Hủy bỏ

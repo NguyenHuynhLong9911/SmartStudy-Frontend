@@ -33,4 +33,54 @@ describe("Prisma migrations", () => {
     expect(migrationSql).toContain('CREATE INDEX "idx_messages_conversation"');
     expect(migrationSql).toContain("ON DELETE CASCADE");
   });
+
+  it("adds summaries table with unique cache constraint", () => {
+    const migrationSql = readFileSync(
+      new URL(
+        "../prisma/migrations/20260706120000_add_summaries_table/migration.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(migrationSql).toContain('CREATE TABLE "summaries"');
+    expect(migrationSql).toContain("summaries_scope_check");
+    expect(migrationSql).toContain("summaries_document_id_scope_chapter_ref_key");
+    expect(migrationSql).toContain("NULLS NOT DISTINCT");
+    expect(migrationSql).toContain("ON DELETE CASCADE");
+  });
+
+  it("adds quizzes table with jsonb questions and check constraints", () => {
+    const migrationSql = readFileSync(
+      new URL(
+        "../prisma/migrations/20260706130000_add_quizzes_table/migration.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(migrationSql).toContain('CREATE TABLE "quizzes"');
+    expect(migrationSql).toContain("quizzes_difficulty_check");
+    expect(migrationSql).toContain("quizzes_questions_check");
+    expect(migrationSql).toContain("ON DELETE CASCADE");
+  });
+
+  it("adds exams and exam_attempts tables with check constraints", () => {
+    const migrationSql = readFileSync(
+      new URL(
+        "../prisma/migrations/20260706140000_add_exams_table/migration.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(migrationSql).toContain('CREATE TABLE "exams"');
+    expect(migrationSql).toContain('CREATE TABLE "exam_attempts"');
+    expect(migrationSql).toContain("exams_num_questions_check");
+    expect(migrationSql).toContain("exam_attempts_answers_check");
+    expect(migrationSql).toContain("ON DELETE CASCADE");
+  });
 });
+
+
+

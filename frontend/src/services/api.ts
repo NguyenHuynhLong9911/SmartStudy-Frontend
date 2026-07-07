@@ -50,16 +50,46 @@ api.interceptors.request.use(
   (error: unknown) => Promise.reject(error)
 );
 
-// Response interceptor for handling auth errors
+// Response interceptor for handling auth errors with refresh token support
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && !error.config?._retry) {
-      // Auto clear auth if unauthorized
-      clearAuth();
-      // Only redirect if not already on welcome/auth page
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/welcome')) {
-        window.location.href = '/welcome';
+    const originalRequest = error.config;
+    // If 401 and not already retrying and not on the refresh endpoint itself
+    if (
+      error.response?.status === 401 &&
+      !originalRequest?._retry &&
+      !originalRequest?.url?.includes('/auth/refresh') &&
+      !originalRequest?.url?.includes('/auth/login')
+    ) {
+      originalRequest._retry = true;
+      const refreshToken = getRefreshToken();
+      if (refreshToken) {
+        try {
+          const refreshResp = await api.post<{ tokens: { accessToken: string; refreshToken: string } }>(
+            '/auth/refresh',
+            { refreshToken }
+          );
+          const { accessToken, refreshToken: newRefreshToken } = refreshResp.data.tokens;
+          setTokens(accessToken, newRefreshToken);
+          // Retry original request with new token
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          }
+          return api(originalRequest);
+        } catch {
+          // Refresh failed — clear auth and redirect
+          clearAuth();
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/welcome')) {
+            window.location.href = '/welcome';
+          }
+        }
+      } else {
+        // No refresh token — clear auth and redirect
+        clearAuth();
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/welcome')) {
+          window.location.href = '/welcome';
+        }
       }
     }
     return Promise.reject(error);
