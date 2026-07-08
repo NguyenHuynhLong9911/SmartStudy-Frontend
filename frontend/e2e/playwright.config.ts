@@ -10,7 +10,8 @@ const __dirname = path.dirname(__filename);
  * See https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-  testDir: './tests',
+  testDir: './',
+  testMatch: '**/*.spec.ts',
   timeout: 90_000,          // LLM-based operations (quiz/exam generation) can be slow
   expect: { timeout: 15_000 },
   retries: 0,               // NO retries — flaky tests must be diagnosed, not hidden
