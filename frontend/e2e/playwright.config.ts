@@ -30,6 +30,12 @@ export default defineConfig({
     actionTimeout: 30_000,
     navigationTimeout: 30_000,
   },
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: true,
+    timeout: 120_000,
+  },
   projects: [
     // Auth setup — runs first, saves storageState
     {
