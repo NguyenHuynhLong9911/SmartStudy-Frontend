@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email         String         @unique @db.VarChar(255)
+  passwordHash  String         @map("password_hash") @db.VarChar(255)
+  fullName      String?        @map("full_name") @db.VarChar(255)
+  role          String         @default("student") @db.VarChar(20)
+  emailVerified Boolean        @default(false) @map("email_verified")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversations Conversation[]
+  documents     Document[]
+  examAttempts  ExamAttempt[]
+  exams         Exam[]
+  quizzes       Quiz[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Document {
+  id        String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  title     String          @db.VarChar(500)
+  fileKey   String          @map("file_key") @db.VarChar(500)
+  status    String          @default("uploading") @db.VarChar(20)
+  pageCount Int?            @map("page_count")
+  sizeBytes BigInt?         @map("size_bytes")
+  chapters  Json            @default("[]") @db.JsonB
+  deleted   Boolean         @default(false)
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  conversations Conversation[]
+  summaries     Summary[]
+  exams         Exam[]
+  quizzes       Quiz[]
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks        DocumentChunk[]
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_documents_user")
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id           String                       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId   String                       @map("document_id") @db.Uuid
+  chunkText    String                       @map("chunk_text") @db.Text
+  chapterTitle String?                      @map("chapter_title") @db.VarChar(500)
+  pageStart    Int?                         @map("page_start")
+  pageEnd      Int?                         @map("page_end")
+  embedding    Unsupported("vector(1024)")?
+  createdAt    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  document     Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId], map: "idx_chunks_document")
+  @@index([embedding], map: "idx_chunks_embedding")
+  @@map("document_chunks")
+}
+
+model Conversation {
+  id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  documentId String?   @map("document_id") @db.Uuid
+  title      String?   @db.VarChar(500)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([userId, createdAt(sort: Desc)], map: "idx_conversations_user")
+  @@index([documentId], map: "idx_conversations_document")
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  role           String       @db.VarChar(10)
+  content        String       @db.Text
+  citations      Json         @default("[]") @db.JsonB
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt], map: "idx_messages_conversation")
+  @@map("messages")
+}
+
+model Summary {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId  String   @map("document_id") @db.Uuid
+  scope       String   @db.VarChar(20)
+  chapterRef  String?  @map("chapter_ref") @db.VarChar(500)
+  summaryText String   @map("summary_text") @db.Text
+  keyPoints   Json     @default("[]") @map("key_points") @db.JsonB
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, scope, chapterRef], map: "summaries_document_id_scope_chapter_ref_key")
+  @@index([documentId], map: "idx_summaries_document")
+  @@map("summaries")
+}
+
+model Quiz {
+  id           String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId   String        @map("document_id") @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  difficulty   String?       @db.VarChar(20)
+  questions    Json          @db.JsonB
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  document     Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examAttempts ExamAttempt[]
+
+  @@index([documentId], map: "idx_quizzes_document")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_quizzes_user")
+  @@map("quizzes")
+}
+
+model Exam {
+  id                     String        @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  documentId             String        @map("document_id") @db.Uuid
+  userId                 String        @map("user_id") @db.Uuid
+  numQuestions           Int           @map("num_questions")
+  timeLimitMinutes       Int?          @map("time_limit_minutes")
+  difficultyDistribution Json?         @map("difficulty_distribution") @db.JsonB
+  questions              Json          @db.JsonB
+  answerKey              Json          @map("answer_key") @db.JsonB
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  document               Document      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts               ExamAttempt[]
+
+  @@index([documentId], map: "idx_exams_document")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_exams_user")
+  @@map("exams")
+}
+
+model ExamAttempt {
+  id             String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  examId         String?  @map("exam_id") @db.Uuid
+  quizId         String?  @map("quiz_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  answers        Json     @db.JsonB
+  score          Decimal? @db.Decimal(10, 2)
+  maxScore       Decimal? @map("max_score") @db.Decimal(10, 2)
+  detailedResult Json?    @map("detailed_result") @db.JsonB
+  aiFeedback     String?  @map("ai_feedback") @db.Text
+  submittedAt    DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  exam           Exam?    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  quiz           Quiz?    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([examId], map: "idx_exam_attempts_exam")
+  @@index([quizId], map: "idx_exam_attempts_quiz")
+  @@index([userId, submittedAt(sort: Desc)], map: "idx_exam_attempts_user")
+  @@map("exam_attempts")
+}

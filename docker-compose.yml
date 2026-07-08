@@ -1,0 +1,247 @@
+name: smartstudy
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartstudy}
+      POSTGRES_USER: ${POSTGRES_USER:-smartstudy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstudy_secret_password}
+    ports:
+      - "${POSTGRES_PORT:-127.0.0.1:5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartstudy} -d ${POSTGRES_DB:-smartstudy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-127.0.0.1:6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-smartstudy-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
+    ports:
+      - "${MINIO_API_PORT:-127.0.0.1:9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-127.0.0.1:9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-smartstudy-local}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}"
+        "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done;
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}";
+        mc anonymous set none "local/$${MINIO_BUCKET}";
+
+  migrate:
+    build:
+      context: ./backend
+      target: build
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smartstudy}:${POSTGRES_PASSWORD:-smartstudy_secret_password}@postgres:5432/${POSTGRES_DB:-smartstudy}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "prisma", "migrate", "deploy"]
+
+  api:
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    command: ["node", "dist/api.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smartstudy}:${POSTGRES_PASSWORD:-smartstudy_secret_password}@postgres:5432/${POSTGRES_DB:-smartstudy}
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-smartstudy}
+      QUEUE_PRODUCER_MAX_RETRIES_PER_REQUEST: ${QUEUE_PRODUCER_MAX_RETRIES_PER_REQUEST:-1}
+      QUEUE_WORKER_CONCURRENCY: ${QUEUE_WORKER_CONCURRENCY:-1}
+      DOCUMENT_MAX_SIZE_BYTES: ${DOCUMENT_MAX_SIZE_BYTES:-52428800}
+      DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS: ${DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS:-900}
+      DOCUMENT_PROCESSING_QUEUE: ${DOCUMENT_PROCESSING_QUEUE:-document-processing}
+      DOCUMENT_PROCESSING_ATTEMPTS: ${DOCUMENT_PROCESSING_ATTEMPTS:-3}
+      DOCUMENT_CHUNK_MAX_TOKENS: ${DOCUMENT_CHUNK_MAX_TOKENS:-700}
+      DOCUMENT_CHUNK_OVERLAP_TOKENS: ${DOCUMENT_CHUNK_OVERLAP_TOKENS:-80}
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:8080}
+      STORAGE_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
+      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-smartstudy-local}
+      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_URL_EXPIRES_SECONDS: ${STORAGE_URL_EXPIRES_SECONDS:-900}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3-compatible}
+      VECTOR_STORE: ${VECTOR_STORE:-pgvector}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-jwt}
+      QUEUE_PROVIDER: ${QUEUE_PROVIDER:-redis}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      JWT_SECRET: ${JWT_SECRET:-smartstudy_local_development_jwt_secret_key_at_least_32_characters}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
+      JWT_ISSUER: ${JWT_ISSUER:-smartstudy-api}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-smartstudy-web}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-4096}
+      ANTHROPIC_MAX_RETRIES: ${ANTHROPIC_MAX_RETRIES:-2}
+      ANTHROPIC_TIMEOUT_MILLISECONDS: ${ANTHROPIC_TIMEOUT_MILLISECONDS:-120000}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MAX_TOKENS: ${GEMINI_MAX_TOKENS:-4096}
+      GEMINI_TIMEOUT_MILLISECONDS: ${GEMINI_TIMEOUT_MILLISECONDS:-120000}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-onnx-community/bge-m3-ONNX}
+      EMBEDDING_DTYPE: ${EMBEDDING_DTYPE:-q8}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-8}
+      EMBEDDING_CACHE_DIR: /app/.cache/huggingface
+    ports:
+      - "${API_PORT:-127.0.0.1:3000}:3000"
+    volumes:
+      - embedding-model-cache:/app/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  worker:
+    build:
+      context: ./backend
+      target: runtime
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-smartstudy}:${POSTGRES_PASSWORD:-smartstudy_secret_password}@postgres:5432/${POSTGRES_DB:-smartstudy}
+      REDIS_URL: redis://redis:6379
+      QUEUE_PREFIX: ${QUEUE_PREFIX:-smartstudy}
+      QUEUE_PRODUCER_MAX_RETRIES_PER_REQUEST: ${QUEUE_PRODUCER_MAX_RETRIES_PER_REQUEST:-1}
+      QUEUE_WORKER_CONCURRENCY: ${QUEUE_WORKER_CONCURRENCY:-1}
+      DOCUMENT_PROCESSING_QUEUE: ${DOCUMENT_PROCESSING_QUEUE:-document-processing}
+      DOCUMENT_PROCESSING_ATTEMPTS: ${DOCUMENT_PROCESSING_ATTEMPTS:-3}
+      DOCUMENT_MAX_SIZE_BYTES: ${DOCUMENT_MAX_SIZE_BYTES:-52428800}
+      DOCUMENT_CHUNK_MAX_TOKENS: ${DOCUMENT_CHUNK_MAX_TOKENS:-700}
+      DOCUMENT_CHUNK_OVERLAP_TOKENS: ${DOCUMENT_CHUNK_OVERLAP_TOKENS:-80}
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
+      STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-smartstudy-local}
+      STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_URL_EXPIRES_SECONDS: ${STORAGE_URL_EXPIRES_SECONDS:-900}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3-compatible}
+      VECTOR_STORE: ${VECTOR_STORE:-pgvector}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-jwt}
+      QUEUE_PROVIDER: ${QUEUE_PROVIDER:-redis}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-4096}
+      ANTHROPIC_MAX_RETRIES: ${ANTHROPIC_MAX_RETRIES:-2}
+      ANTHROPIC_TIMEOUT_MILLISECONDS: ${ANTHROPIC_TIMEOUT_MILLISECONDS:-120000}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MAX_TOKENS: ${GEMINI_MAX_TOKENS:-4096}
+      GEMINI_TIMEOUT_MILLISECONDS: ${GEMINI_TIMEOUT_MILLISECONDS:-120000}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-onnx-community/bge-m3-ONNX}
+      EMBEDDING_DTYPE: ${EMBEDDING_DTYPE:-q8}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-8}
+      EMBEDDING_CACHE_DIR: /app/.cache/huggingface
+    volumes:
+      - embedding-model-cache:/app/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+      MINIO_UPSTREAM: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  embedding-model-cache:
