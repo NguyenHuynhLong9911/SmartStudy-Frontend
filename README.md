@@ -111,6 +111,28 @@ docker compose down
 
 Chỉ dùng `docker compose down -v` khi chủ động muốn xoá toàn bộ dữ liệu local.
 
+## Cai dat tren may khac bang Docker
+
+Da co Docker setup de chay full stack tren mot may moi: frontend Nginx, API,
+worker, PostgreSQL pgvector, Redis va MinIO.
+Nguoi moi chi can tao `.env`, roi chay `docker compose up -d --build`; Compose
+tu build va start tat ca service, chay migration va tao bucket MinIO.
+
+Lenh nhanh tren Linux/macOS:
+
+```bash
+git clone https://github.com/cong-thanh1/SmartStudy.git SmartStudyAI && cd SmartStudyAI && bash scripts/setup-deploy-env.sh --public-url "http://SERVER_IP_OR_DOMAIN:8080" --llm-provider mock && docker compose up -d --build
+```
+
+Lenh nhanh tren Windows PowerShell:
+
+```powershell
+git clone https://github.com/cong-thanh1/SmartStudy.git SmartStudyAI; Set-Location SmartStudyAI; .\scripts\setup-deploy-env.ps1 -PublicUrl "http://SERVER_IP_OR_DOMAIN:8080" -LlmProvider mock; docker compose up -d --build
+```
+
+Huong dan cho nguoi moi: `docs/DOCKER_COMPOSE_BEGINNER_GUIDE.md`.
+Huong dan cai tren may khac: `docs/DEPLOY_ON_ANOTHER_MACHINE.md`.
+
 ## Backend
 
 ```bash
