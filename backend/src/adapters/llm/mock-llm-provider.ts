@@ -1,17 +1,19 @@
-import type { ILLMProvider } from "../../ports/index.js";
+import type {
+  GeneratedText,
+  GenerateStructuredJsonInput,
+  GenerateTextInput,
+  ILLMProvider,
+} from "../../ports/index.js";
 
 export class MockLLMProvider implements ILLMProvider {
-  async generateStructuredJSON<T>(input: {
-    messages: { role: string; content: string }[];
-    schemaDescription: string;
-    systemPrompt: string;
-    temperature?: number;
-  }): Promise<T> {
+  async generateStructuredJSON<T>(
+    input: GenerateStructuredJsonInput,
+  ): Promise<T> {
     // Parse numQuestions from systemPrompt if available
     let numQuestions = 10;
-    const match = input.systemPrompt.match(/exactly (\d+)/i);
+    const match = input.systemPrompt?.match(/exactly (\d+)/i);
     if (match && match[1]) {
-      numQuestions = parseInt(match[1], 10);
+      numQuestions = Number.parseInt(match[1], 10);
     }
 
     const questions = Array.from({ length: numQuestions }).map((_, i) => ({
@@ -26,11 +28,9 @@ export class MockLLMProvider implements ILLMProvider {
     return { questions } as unknown as T;
   }
 
-  async generateText(input: {
-    messages: { role: string; content: string }[];
-    systemPrompt?: string;
-    temperature?: number;
-  }): Promise<{ text: string }> {
+  async generateText(input: GenerateTextInput): Promise<GeneratedText> {
+    void input;
+
     return { text: "This is a mock LLM response." };
   }
 }

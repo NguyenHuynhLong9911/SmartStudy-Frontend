@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-smartstudy}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartstudy_secret_password}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-127.0.0.1:5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +23,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-127.0.0.1:6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -40,8 +40,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-smartstudy-local}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${MINIO_API_PORT:-127.0.0.1:9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-127.0.0.1:9001}:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -87,7 +87,7 @@ services:
     restart: unless-stopped
     command: ["node", "dist/api.js"]
     environment:
-      NODE_ENV: development
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-smartstudy}:${POSTGRES_PASSWORD:-smartstudy_secret_password}@postgres:5432/${POSTGRES_DB:-smartstudy}
       REDIS_URL: redis://redis:6379
@@ -101,12 +101,17 @@ services:
       DOCUMENT_CHUNK_MAX_TOKENS: ${DOCUMENT_CHUNK_MAX_TOKENS:-700}
       DOCUMENT_CHUNK_OVERLAP_TOKENS: ${DOCUMENT_CHUNK_OVERLAP_TOKENS:-80}
       STORAGE_ENDPOINT: http://minio:9000
-      STORAGE_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_PORT:-9000}
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:8080}
       STORAGE_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
       STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-smartstudy-local}
       STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
       STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
       STORAGE_URL_EXPIRES_SECONDS: ${STORAGE_URL_EXPIRES_SECONDS:-900}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3-compatible}
+      VECTOR_STORE: ${VECTOR_STORE:-pgvector}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-jwt}
+      QUEUE_PROVIDER: ${QUEUE_PROVIDER:-redis}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       JWT_SECRET: ${JWT_SECRET:-smartstudy_local_development_jwt_secret_key_at_least_32_characters}
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
@@ -123,12 +128,13 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_MAX_TOKENS: ${GEMINI_MAX_TOKENS:-4096}
       GEMINI_TIMEOUT_MILLISECONDS: ${GEMINI_TIMEOUT_MILLISECONDS:-120000}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-onnx-community/bge-m3-ONNX}
       EMBEDDING_DTYPE: ${EMBEDDING_DTYPE:-q8}
       EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-8}
       EMBEDDING_CACHE_DIR: /app/.cache/huggingface
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${API_PORT:-127.0.0.1:3000}:3000"
     volumes:
       - embedding-model-cache:/app/.cache/huggingface
     depends_on:
@@ -160,7 +166,7 @@ services:
     restart: unless-stopped
     command: ["node", "dist/worker.js"]
     environment:
-      NODE_ENV: development
+      NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-smartstudy}:${POSTGRES_PASSWORD:-smartstudy_secret_password}@postgres:5432/${POSTGRES_DB:-smartstudy}
       REDIS_URL: redis://redis:6379
       QUEUE_PREFIX: ${QUEUE_PREFIX:-smartstudy}
@@ -177,6 +183,11 @@ services:
       STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-smartstudy_minio_secret}
       STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
       STORAGE_URL_EXPIRES_SECONDS: ${STORAGE_URL_EXPIRES_SECONDS:-900}
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-s3-compatible}
+      VECTOR_STORE: ${VECTOR_STORE:-pgvector}
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-jwt}
+      QUEUE_PROVIDER: ${QUEUE_PROVIDER:-redis}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
@@ -187,6 +198,7 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_MAX_TOKENS: ${GEMINI_MAX_TOKENS:-4096}
       GEMINI_TIMEOUT_MILLISECONDS: ${GEMINI_TIMEOUT_MILLISECONDS:-120000}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-onnx-community/bge-m3-ONNX}
       EMBEDDING_DTYPE: ${EMBEDDING_DTYPE:-q8}
       EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-8}
@@ -202,6 +214,31 @@ services:
         condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:3000
+      MINIO_UPSTREAM: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-smartstudy-documents}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
 volumes:
   postgres-data:
