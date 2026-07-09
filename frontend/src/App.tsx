@@ -17,7 +17,7 @@ export const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-[#F4F7F9] text-[#232F3E]">
         <div className="text-center">
           <div className="mx-auto mb-5 h-10 w-10 rounded-full border-4 border-[#D0E4FF] border-t-[#0073BB] animate-spin" />
-          <p className="text-sm font-semibold">Dang tai...</p>
+          <p className="text-sm font-semibold">Loading...</p>
         </div>
       </div>
     );
@@ -27,13 +27,13 @@ export const App: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F4F7F9] px-6 text-[#232F3E]">
         <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold mb-3">Khong the dang nhap</h1>
+          <h1 className="text-2xl font-bold mb-3">Unable to sign in</h1>
           <p className="text-sm text-[#707882] mb-6">{auth.error.message}</p>
           <button
             onClick={() => void auth.signinRedirect()}
             className="rounded-lg bg-[#0073BB] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#005f99] transition-colors"
           >
-            Thu lai
+            Try again
           </button>
         </div>
       </div>
@@ -48,12 +48,12 @@ export const App: React.FC = () => {
             <span className="text-xl font-black">S</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight mb-3">SmartStudy</h1>
-          <p className="text-sm text-[#707882] mb-8">Vui long dang nhap de tiep tuc.</p>
+          <p className="text-sm text-[#707882] mb-8">Please sign in to continue.</p>
           <button
             onClick={() => void auth.signinRedirect()}
             className="w-full rounded-lg bg-[#0073BB] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#005f99] transition-colors"
           >
-            Dang nhap voi Cognito
+            Sign in with Cognito
           </button>
         </div>
       </div>
