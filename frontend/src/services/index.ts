@@ -76,6 +76,8 @@ export const documentService = {
       'Content-Type': file.type,
       ...(presignedResp.data.upload.headers || {}),
     };
+    delete uploadHeaders['content-length'];
+    delete uploadHeaders['Content-Length'];
     const uploadResp = await fetch(presignedResp.data.upload.url, {
       method: 'PUT',
       body: file,

@@ -240,7 +240,6 @@ describe("S3CompatibleStorageProvider", () => {
     expect(upload).toEqual({
       expiresAt: new Date("2026-07-04T08:10:00.000Z"),
       headers: {
-        "content-length": "42",
         "content-type": "application/pdf",
       },
       method: "PUT",
@@ -251,7 +250,6 @@ describe("S3CompatibleStorageProvider", () => {
     expect(calls[0]?.command).toBeInstanceOf(PutObjectCommand);
     expect(calls[0]?.command.input).toMatchObject({
       Bucket: "smartstudy-documents",
-      ContentLength: 42,
       ContentType: "application/pdf",
       Key: "documents/a.pdf",
     });

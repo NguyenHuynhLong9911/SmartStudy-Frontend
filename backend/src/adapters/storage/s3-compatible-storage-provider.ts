@@ -168,7 +168,6 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
     );
     const command = new PutObjectCommand({
       Bucket: this.config.bucket,
-      ContentLength: input.contentLength,
       ContentType: input.contentType,
       Key: input.key,
     });
@@ -178,9 +177,6 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
       expiresAt: new Date(this.now().getTime() + expiresInSeconds * 1000),
       headers: {
         "content-type": input.contentType,
-        ...(typeof input.contentLength === "number"
-          ? { "content-length": String(input.contentLength) }
-          : {}),
       },
       method: "PUT",
       url,
