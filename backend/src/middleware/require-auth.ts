@@ -4,7 +4,7 @@ import { InvalidTokenError } from "../modules/auth/auth-errors.js";
 import type { AuthClaims, IAuthProvider } from "../ports/index.js";
 
 const AUTH_CLAIMS_LOCAL = "authClaims";
-const MAX_ACCESS_TOKEN_LENGTH = 4_096;
+const MAX_ACCESS_TOKEN_LENGTH = 16_384;
 
 export function requireAuth(authProvider: IAuthProvider): RequestHandler {
   return (request, response, next): void => {

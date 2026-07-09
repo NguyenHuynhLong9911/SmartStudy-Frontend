@@ -6,6 +6,8 @@ dist/
 coverage/
 *.tsbuildinfo
 .cache/
+.serverless/
+.deploy/
 
 # Runtime data
 data/

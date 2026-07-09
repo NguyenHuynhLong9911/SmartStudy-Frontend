@@ -38,6 +38,7 @@ const config: DocumentConfig = {
   maxFileSizeBytes: 10_000_000,
   processingAttempts: 3,
   processingQueue: "document-processing",
+  uploadOnly: false,
   uploadUrlExpiresSeconds: 900,
 };
 

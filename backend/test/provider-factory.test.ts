@@ -14,11 +14,10 @@ import {
   type ProviderRegistry,
   type Providers,
 } from "../src/provider-factory.js";
+import { CognitoAuthProvider } from "../src/adapters/auth/cognito-auth-provider.js";
 import { JwtAuthProvider } from "../src/adapters/auth/jwt-auth-provider.js";
-import { LocalBgeM3Provider } from "../src/adapters/embedding/local-bge-m3-provider.js";
-import { AnthropicLLMProvider } from "../src/adapters/llm/anthropic-llm-provider.js";
-import { GeminiLLMProvider } from "../src/adapters/llm/gemini-llm-provider.js";
 import { RedisQueueProvider } from "../src/adapters/queue/redis-queue-provider.js";
+import { SqsQueueProvider } from "../src/adapters/queue/sqs-queue-provider.js";
 import { S3CompatibleStorageProvider } from "../src/adapters/storage/s3-compatible-storage-provider.js";
 import { PgVectorStore } from "../src/adapters/vector/pg-vector-store.js";
 import type { PrismaClient } from "../src/generated/prisma/client.js";
@@ -163,30 +162,41 @@ describe("ProviderFactory", () => {
     ).toBeInstanceOf(RedisQueueProvider);
   });
 
-  it("composes the local BGE-M3 embedding adapter", () => {
+  it("composes the SQS queue adapter from environment config", () => {
     expect(
-      createEmbeddingProviderFromEnv({
-        EMBEDDING_PROVIDER: "local",
+      createQueueProviderFromEnv({
+        QUEUE_PROVIDER: "sqs",
+        SQS_QUEUE_URL:
+          "https://sqs.ap-southeast-1.amazonaws.com/123456789012/document-processing",
       }),
-    ).toBeInstanceOf(LocalBgeM3Provider);
+    ).toBeInstanceOf(SqsQueueProvider);
+  });
+
+  it("composes the local BGE-M3 embedding adapter", () => {
+    const provider = createEmbeddingProviderFromEnv({
+      EMBEDDING_PROVIDER: "local",
+    });
+
+    expect(provider.dimensions).toBe(1024);
+    expect(provider.embedBatch).toEqual(expect.any(Function));
   });
 
   it("composes the Anthropic LLM adapter", () => {
-    expect(
-      createLLMProviderFromEnv({
-        ANTHROPIC_API_KEY: "test-api-key",
-        LLM_PROVIDER: "anthropic",
-      }),
-    ).toBeInstanceOf(AnthropicLLMProvider);
+    const provider = createLLMProviderFromEnv({
+      ANTHROPIC_API_KEY: "test-api-key",
+      LLM_PROVIDER: "anthropic",
+    });
+
+    expect(provider.generateText).toEqual(expect.any(Function));
   });
 
   it("composes the Gemini LLM adapter", () => {
-    expect(
-      createLLMProviderFromEnv({
-        GEMINI_API_KEY: "test-api-key",
-        LLM_PROVIDER: "gemini",
-      }),
-    ).toBeInstanceOf(GeminiLLMProvider);
+    const provider = createLLMProviderFromEnv({
+      GEMINI_API_KEY: "test-api-key",
+      LLM_PROVIDER: "gemini",
+    });
+
+    expect(provider.generateStructuredJSON).toEqual(expect.any(Function));
   });
   it("defers missing LLM configuration until the provider is used", async () => {
     const provider = createLazyLLMProviderFromEnv({
@@ -210,26 +220,16 @@ describe("ProviderFactory", () => {
     ).toBeInstanceOf(PgVectorStore);
   });
 
-  it("fails fast for an auth adapter that is not implemented yet", () => {
+  it("composes the Cognito auth adapter from environment config", () => {
     const repository = Object.freeze({}) as IAuthRepository;
 
-    expect(() =>
+    expect(
       createAuthProviderFromEnv(repository, {
         AUTH_PROVIDER: "cognito",
+        COGNITO_CLIENT_ID: "test-client-id",
+        COGNITO_USER_POOL_ID: "ap-southeast-1_example",
       }),
-    ).toThrow(
-      new ProviderNotRegisteredError("auth", "cognito"),
-    );
-  });
-
-  it("fails fast for a queue adapter that is not implemented yet", () => {
-    expect(() =>
-      createQueueProviderFromEnv({
-        QUEUE_PROVIDER: "sqs",
-      }),
-    ).toThrow(
-      new ProviderNotRegisteredError("queue", "sqs"),
-    );
+    ).toBeInstanceOf(CognitoAuthProvider);
   });
 
   it("fails fast for AI adapters that are not implemented yet", () => {

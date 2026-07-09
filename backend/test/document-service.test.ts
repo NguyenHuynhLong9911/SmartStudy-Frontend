@@ -32,6 +32,7 @@ const config: DocumentConfig = {
   maxFileSizeBytes: 1_000,
   processingAttempts: 3,
   processingQueue: "document-processing",
+  uploadOnly: false,
   uploadUrlExpiresSeconds: 600,
 };
 const upload: PresignedUpload = {

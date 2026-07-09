@@ -16,6 +16,7 @@ describe("document config", () => {
       maxFileSizeBytes: DEFAULT_DOCUMENT_MAX_SIZE_BYTES,
       processingAttempts: 3,
       processingQueue: "document-processing",
+      uploadOnly: false,
       uploadUrlExpiresSeconds: 900,
     });
   });
@@ -28,6 +29,7 @@ describe("document config", () => {
         DOCUMENT_MAX_SIZE_BYTES: "10485760",
         DOCUMENT_PROCESSING_ATTEMPTS: "5",
         DOCUMENT_PROCESSING_QUEUE: "pdf-processing",
+        DOCUMENT_UPLOAD_ONLY: "true",
         DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS: "600",
       }),
     ).toEqual({
@@ -36,6 +38,7 @@ describe("document config", () => {
       maxFileSizeBytes: 10_485_760,
       processingAttempts: 5,
       processingQueue: "pdf-processing",
+      uploadOnly: true,
       uploadUrlExpiresSeconds: 600,
     });
   });

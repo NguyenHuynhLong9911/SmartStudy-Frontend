@@ -22,6 +22,13 @@ export interface CreateAuthUserInput {
   readonly passwordHash: string;
 }
 
+export interface UpsertExternalAuthUserInput {
+  readonly email: string;
+  readonly emailVerified: boolean;
+  readonly fullName?: string;
+  readonly id: string;
+}
+
 export interface SaveRefreshTokenInput {
   readonly expiresAt: Date;
   readonly tokenHash: string;
@@ -47,4 +54,5 @@ export interface IAuthRepository {
   revokeRefreshToken(tokenHash: string, revokedAt: Date): Promise<void>;
   rotateRefreshToken(input: RotateRefreshTokenInput): Promise<boolean>;
   saveRefreshToken(input: SaveRefreshTokenInput): Promise<void>;
+  upsertExternalUser(input: UpsertExternalAuthUserInput): Promise<AuthUserRecord>;
 }

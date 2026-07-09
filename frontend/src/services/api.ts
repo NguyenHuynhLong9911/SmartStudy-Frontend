@@ -39,42 +39,9 @@ export const clearAuth = () => {
   localStorage.removeItem(USER_KEY);
 };
 
-interface TokenRefreshResponse {
-  readonly tokens: {
-    readonly accessToken: string;
-    readonly refreshToken: string;
-  };
-}
-
-let tokenRefreshPromise: Promise<TokenRefreshResponse['tokens']> | null = null;
-
-const refreshAuthTokens = async (): Promise<TokenRefreshResponse['tokens']> => {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) {
-    throw new Error('Missing refresh token');
-  }
-
-  tokenRefreshPromise ??= axios
-    .post<TokenRefreshResponse>(
-      `${BASE_URL}/auth/refresh`,
-      { refreshToken },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    )
-    .then((response) => response.data.tokens)
-    .finally(() => {
-      tokenRefreshPromise = null;
-    });
-
-  return tokenRefreshPromise;
-};
-
-const redirectToWelcome = () => {
-  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/welcome')) {
-    window.location.href = '/welcome';
+const notifyAuthExpired = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('smartstudy:auth-expired'));
   }
 };
 
@@ -82,7 +49,7 @@ const redirectToWelcome = () => {
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = getAccessToken();
-    const cognitoToken = getCognitoAccessToken();
+    const cognitoToken = getCognitoIdToken();
     if (config.headers) {
       const accessToken = cognitoToken || token;
       if (accessToken) {
@@ -94,7 +61,7 @@ api.interceptors.request.use(
   (error: unknown) => Promise.reject(error)
 );
 
-// Response interceptor for handling auth errors with refresh token support
+// Response interceptor for Cognito-protected API calls.
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -107,39 +74,25 @@ api.interceptors.response.use(
       originalRequest &&
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/auth/refresh') &&
       !originalRequest.url?.includes('/auth/login')
     ) {
       originalRequest._retry = true;
-
-      try {
-        const { accessToken, refreshToken: newRefreshToken } =
-          await refreshAuthTokens();
-        setTokens(accessToken, newRefreshToken);
-        // Retry original request with new token
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        }
-        return api(originalRequest);
-      } catch (refreshError) {
-        clearAuth();
-        redirectToWelcome();
-        return Promise.reject(refreshError);
-      }
+      clearAuth();
+      notifyAuthExpired();
     }
 
     return Promise.reject(error);
   }
 );
 
-function getCognitoAccessToken(): string | null {
-  return readOidcAccessToken(sessionStorage) ?? readOidcAccessToken(localStorage);
+function getCognitoIdToken(): string | null {
+  return readOidcIdToken(sessionStorage) ?? readOidcIdToken(localStorage);
 }
 
-function readOidcAccessToken(storage: Storage): string | null {
+function readOidcIdToken(storage: Storage): string | null {
   const direct = storage.getItem(cognitoStoragePrefix);
   if (direct) {
-    return parseOidcAccessToken(direct);
+    return parseOidcIdToken(direct);
   }
 
   for (let index = 0; index < storage.length; index += 1) {
@@ -148,7 +101,7 @@ function readOidcAccessToken(storage: Storage): string | null {
       continue;
     }
 
-    const token = parseOidcAccessToken(storage.getItem(key));
+    const token = parseOidcIdToken(storage.getItem(key));
     if (token) {
       return token;
     }
@@ -157,18 +110,18 @@ function readOidcAccessToken(storage: Storage): string | null {
   return null;
 }
 
-function parseOidcAccessToken(value: string | null): string | null {
+function parseOidcIdToken(value: string | null): string | null {
   if (!value) {
     return null;
   }
 
   try {
-    const parsed = JSON.parse(value) as { access_token?: string; expires_at?: number };
+    const parsed = JSON.parse(value) as { id_token?: string; expires_at?: number };
     if (
-      parsed.access_token &&
+      parsed.id_token &&
       (!parsed.expires_at || parsed.expires_at > Math.floor(Date.now() / 1000))
     ) {
-      return parsed.access_token;
+      return parsed.id_token;
     }
   } catch {
     return null;

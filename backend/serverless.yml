@@ -1,0 +1,218 @@
+service: smartstudy-backend
+frameworkVersion: "3"
+
+custom:
+  documentProcessingQueueName: ${self:service}-${sls:stage}-document-processing
+  documentProcessingDlqName: ${self:service}-${sls:stage}-document-processing-dlq
+  storageBucket: ${env:STORAGE_BUCKET}
+  vpcId: vpc-048899ef7000bbcfc
+  rdsSecurityGroupId: sg-035e0033ea797f1cd
+  routeTableId: rtb-0b73cf1d3a54fd73c
+  subnetIds:
+    - subnet-06726a16285d94b3f
+    - subnet-0d046d5e85c0f8636
+    - subnet-0c5f5774ced594ad9
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  architecture: x86_64
+  region: ${opt:region, env:AWS_REGION, "ap-southeast-1"}
+  stage: ${opt:stage, "prod"}
+  logRetentionInDays: 14
+  memorySize: 1024
+  timeout: 30
+  environment:
+    NODE_OPTIONS: --enable-source-maps
+    DATABASE_URL: ${env:DATABASE_URL}
+    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_ACCESS_TTL_SECONDS: ${env:JWT_ACCESS_TTL_SECONDS, "900"}
+    JWT_REFRESH_TTL_SECONDS: ${env:JWT_REFRESH_TTL_SECONDS, "2592000"}
+    JWT_ISSUER: ${env:JWT_ISSUER, "smartstudy-api"}
+    JWT_AUDIENCE: ${env:JWT_AUDIENCE, "smartstudy-web"}
+    BCRYPT_COST: ${env:BCRYPT_COST, "12"}
+    COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
+    COGNITO_TOKEN_USE: ${env:COGNITO_TOKEN_USE, "id"}
+    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    CORS_ALLOWED_ORIGINS: ${env:CORS_ALLOWED_ORIGINS, "*"}
+    STORAGE_PROVIDER: s3-compatible
+    STORAGE_REGION: ${env:STORAGE_REGION, self:provider.region}
+    STORAGE_BUCKET: ${self:custom.storageBucket}
+    STORAGE_ENDPOINT: ${env:STORAGE_ENDPOINT, ""}
+    STORAGE_PUBLIC_ENDPOINT: ${env:STORAGE_PUBLIC_ENDPOINT, ""}
+    STORAGE_FORCE_PATH_STYLE: ${env:STORAGE_FORCE_PATH_STYLE, ""}
+    STORAGE_ACCESS_KEY: ${env:STORAGE_ACCESS_KEY, ""}
+    STORAGE_SECRET_KEY: ${env:STORAGE_SECRET_KEY, ""}
+    STORAGE_URL_EXPIRES_SECONDS: ${env:STORAGE_URL_EXPIRES_SECONDS, "900"}
+    DOCUMENT_MAX_SIZE_BYTES: ${env:DOCUMENT_MAX_SIZE_BYTES, "52428800"}
+    DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS: ${env:DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS, "900"}
+    DOCUMENT_PROCESSING_QUEUE: ${self:custom.documentProcessingQueueName}
+    DOCUMENT_PROCESSING_ATTEMPTS: ${env:DOCUMENT_PROCESSING_ATTEMPTS, "3"}
+    DOCUMENT_UPLOAD_ONLY: ${env:DOCUMENT_UPLOAD_ONLY, "true"}
+    DOCUMENT_CHUNK_MAX_TOKENS: ${env:DOCUMENT_CHUNK_MAX_TOKENS, "700"}
+    DOCUMENT_CHUNK_OVERLAP_TOKENS: ${env:DOCUMENT_CHUNK_OVERLAP_TOKENS, "80"}
+    QUEUE_PROVIDER: sqs
+    SQS_QUEUE_URL:
+      Ref: DocumentProcessingQueue
+    SQS_REGION: ${self:provider.region}
+    VECTOR_STORE: ${env:VECTOR_STORE, "pgvector"}
+    LLM_PROVIDER: ${env:LLM_PROVIDER, "anthropic"}
+    EMBEDDING_PROVIDER: ${env:EMBEDDING_PROVIDER, "local"}
+    AUTH_PROVIDER: ${env:AUTH_PROVIDER, "cognito"}
+    EMAIL_PROVIDER: ${env:EMAIL_PROVIDER, "smtp"}
+    ANTHROPIC_API_KEY: ${env:ANTHROPIC_API_KEY, ""}
+    ANTHROPIC_MODEL: ${env:ANTHROPIC_MODEL, "claude-sonnet-4-6"}
+    ANTHROPIC_MAX_TOKENS: ${env:ANTHROPIC_MAX_TOKENS, "4096"}
+    ANTHROPIC_MAX_RETRIES: ${env:ANTHROPIC_MAX_RETRIES, "2"}
+    ANTHROPIC_TIMEOUT_MILLISECONDS: ${env:ANTHROPIC_TIMEOUT_MILLISECONDS, "120000"}
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY, ""}
+    GEMINI_MODEL: ${env:GEMINI_MODEL, "gemini-2.5-flash"}
+    GEMINI_MAX_TOKENS: ${env:GEMINI_MAX_TOKENS, "4096"}
+    GEMINI_TIMEOUT_MILLISECONDS: ${env:GEMINI_TIMEOUT_MILLISECONDS, "120000"}
+    EMBEDDING_MODEL: ${env:EMBEDDING_MODEL, "onnx-community/bge-m3-ONNX"}
+    EMBEDDING_DTYPE: ${env:EMBEDDING_DTYPE, "q8"}
+    EMBEDDING_BATCH_SIZE: ${env:EMBEDDING_BATCH_SIZE, "8"}
+    EMBEDDING_CACHE_DIR: ${env:EMBEDDING_CACHE_DIR, "/tmp/huggingface"}
+  httpApi:
+    cors: true
+  vpc:
+    securityGroupIds:
+      - Ref: LambdaSecurityGroup
+    subnetIds: ${self:custom.subnetIds}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:DeleteObject
+            - s3:GetObject
+            - s3:ListBucket
+            - s3:PutObject
+          Resource:
+            - arn:aws:s3:::${self:custom.storageBucket}
+            - arn:aws:s3:::${self:custom.storageBucket}/*
+        - Effect: Allow
+          Action:
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            - sqs:ReceiveMessage
+            - sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+              - DocumentProcessingQueue
+              - Arn
+
+functions:
+  api:
+    handler: dist/handler.api
+    events:
+      - httpApi:
+          path: /
+          method: ANY
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+  documentProcessor:
+    handler: dist/handler.processDocument
+    memorySize: 3008
+    timeout: 900
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - DocumentProcessingQueue
+              - Arn
+          batchSize: 1
+          maximumBatchingWindow: 0
+
+resources:
+  Resources:
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: SmartStudy backend Lambda access
+        GroupName: ${self:service}-${sls:stage}-lambda-sg
+        VpcId: ${self:custom.vpcId}
+
+    RdsIngressFromLambda:
+      Type: AWS::EC2::SecurityGroupIngress
+      Properties:
+        GroupId: ${self:custom.rdsSecurityGroupId}
+        IpProtocol: tcp
+        FromPort: 5432
+        ToPort: 5432
+        SourceSecurityGroupId:
+          Ref: LambdaSecurityGroup
+
+    VpcEndpointSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: SmartStudy Lambda access to VPC interface endpoints
+        GroupName: ${self:service}-${sls:stage}-vpce-sg
+        VpcId: ${self:custom.vpcId}
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 443
+            ToPort: 443
+            SourceSecurityGroupId:
+              Ref: LambdaSecurityGroup
+
+    SqsVpcEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        PrivateDnsEnabled: true
+        SecurityGroupIds:
+          - Ref: VpcEndpointSecurityGroup
+        ServiceName:
+          Fn::Sub: com.amazonaws.${AWS::Region}.sqs
+        SubnetIds: ${self:custom.subnetIds}
+        VpcEndpointType: Interface
+        VpcId: ${self:custom.vpcId}
+
+    S3GatewayEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        RouteTableIds:
+          - ${self:custom.routeTableId}
+        ServiceName:
+          Fn::Sub: com.amazonaws.${AWS::Region}.s3
+        VpcEndpointType: Gateway
+        VpcId: ${self:custom.vpcId}
+
+    DocumentProcessingDeadLetterQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.documentProcessingDlqName}
+        MessageRetentionPeriod: 1209600
+
+    DocumentProcessingQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:custom.documentProcessingQueueName}
+        VisibilityTimeout: 960
+        RedrivePolicy:
+          deadLetterTargetArn:
+            Fn::GetAtt:
+              - DocumentProcessingDeadLetterQueue
+              - Arn
+          maxReceiveCount: 3
+
+package:
+  artifact: .deploy/smartstudy-backend.zip
+  excludeDevDependencies: true
+  patterns:
+    - dist/**
+    - prisma/schema.prisma
+    - package.json
+    - "!node_modules/**/*.map"
+    - "!node_modules/**/test/**"
+    - "!node_modules/**/tests/**"
+    - "!node_modules/**/docs/**"
+    - "!node_modules/**/examples/**"
+    - "!node_modules/**/coverage/**"
+    - "!node_modules/**/*.md"
+    - "!src/**"
+    - "!test/**"
+    - "!coverage/**"
+    - "!docs/**"

@@ -12,6 +12,17 @@ import {
 export const App: React.FC = () => {
   const auth = useAuth();
 
+  React.useEffect(() => {
+    const handleAuthExpired = () => {
+      if (!auth.isLoading) {
+        void auth.signinRedirect();
+      }
+    };
+
+    window.addEventListener('smartstudy:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('smartstudy:auth-expired', handleAuthExpired);
+  }, [auth]);
+
   if (auth.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F4F7F9] text-[#232F3E]">

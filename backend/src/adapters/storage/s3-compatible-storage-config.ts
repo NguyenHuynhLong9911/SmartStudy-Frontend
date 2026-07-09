@@ -7,8 +7,10 @@ const optionalNonEmptyString = z
   .optional();
 
 const optionalBooleanString = z
-  .enum(["true", "false", "1", "0"])
-  .transform((value) => value === "true" || value === "1")
+  .enum(["true", "false", "1", "0", ""])
+  .transform((value) =>
+    value.length === 0 ? undefined : value === "true" || value === "1",
+  )
   .optional();
 
 const storageEnvironmentSchema = z

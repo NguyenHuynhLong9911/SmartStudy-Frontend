@@ -11,17 +11,15 @@ import {
 } from "./provider-config.js";
 import { ProviderConfigurationError } from "./provider-errors.js";
 import { BcryptPasswordHasher } from "./adapters/auth/bcrypt-password-hasher.js";
+import { loadCognitoAuthConfig } from "./adapters/auth/cognito-auth-config.js";
+import { CognitoAuthProvider } from "./adapters/auth/cognito-auth-provider.js";
 import { loadJwtAuthConfig } from "./adapters/auth/jwt-auth-config.js";
 import { JwtAuthProvider } from "./adapters/auth/jwt-auth-provider.js";
-import { loadLocalBgeM3Config } from "./adapters/embedding/local-bge-m3-config.js";
-import { LocalBgeM3Provider } from "./adapters/embedding/local-bge-m3-provider.js";
-import { loadAnthropicLLMConfig } from "./adapters/llm/anthropic-llm-config.js";
-import { AnthropicLLMProvider } from "./adapters/llm/anthropic-llm-provider.js";
-import { loadGeminiLLMConfig } from "./adapters/llm/gemini-llm-config.js";
-import { GeminiLLMProvider } from "./adapters/llm/gemini-llm-provider.js";
 import { MockLLMProvider } from "./adapters/llm/mock-llm-provider.js";
 import { loadRedisQueueConfig } from "./adapters/queue/redis-queue-config.js";
 import { RedisQueueProvider } from "./adapters/queue/redis-queue-provider.js";
+import { loadSqsQueueConfig } from "./adapters/queue/sqs-queue-config.js";
+import { SqsQueueProvider } from "./adapters/queue/sqs-queue-provider.js";
 import { loadS3CompatibleStorageConfig } from "./adapters/storage/s3-compatible-storage-config.js";
 import { S3CompatibleStorageProvider } from "./adapters/storage/s3-compatible-storage-provider.js";
 import { PgVectorStore } from "./adapters/vector/pg-vector-store.js";
@@ -36,6 +34,8 @@ import type {
   IStorageProvider,
   IVectorStore,
 } from "./ports/index.js";
+
+const LOCAL_BGE_M3_DIMENSIONS = 1_024;
 
 export type ProviderBuilder<TProvider> = () => TProvider;
 
@@ -179,6 +179,19 @@ export function createAuthProviderFromEnv(
   const config = loadProviderConfig(environment);
   const registry: ProviderRegistry = {
     auth: {
+      cognito: () => {
+        const cognitoConfig = loadCognitoAuthConfig(environment);
+        return new CognitoAuthProvider(
+          cognitoConfig,
+          (claims, profile) =>
+            repository.upsertExternalUser({
+              email: claims.email,
+              emailVerified: profile.emailVerified,
+              ...(profile.fullName ? { fullName: profile.fullName } : {}),
+              id: claims.sub,
+            }).then(() => undefined),
+        );
+      },
       jwt: () => {
         const jwtConfig = loadJwtAuthConfig(environment);
         return new JwtAuthProvider(
@@ -223,7 +236,7 @@ export function createStorageProviderFromEnv(
 
 export function createQueueProviderFromEnv(
   environment: NodeJS.ProcessEnv = process.env,
-): RedisQueueProvider {
+): IQueueProvider {
   const config = loadProviderConfig(environment);
   const registry: ProviderRegistry = {
     auth: {},
@@ -233,21 +246,16 @@ export function createQueueProviderFromEnv(
     queue: {
       redis: () =>
         new RedisQueueProvider(loadRedisQueueConfig(environment)),
+      sqs: () => new SqsQueueProvider(loadSqsQueueConfig(environment)),
     },
     storage: {},
     vectorStore: {},
   };
 
-  const queueProvider = new ProviderFactory(
+  return new ProviderFactory(
     config,
     registry,
   ).createQueueProvider();
-
-  if (!(queueProvider instanceof RedisQueueProvider)) {
-    throw new TypeError("Resolved queue provider is not RedisQueueProvider");
-  }
-
-  return queueProvider;
 }
 
 export function createEmbeddingProviderFromEnv(
@@ -259,7 +267,15 @@ export function createEmbeddingProviderFromEnv(
     email: {},
     embedding: {
       local: () =>
-        new LocalBgeM3Provider(loadLocalBgeM3Config(environment)),
+        new LazyEmbeddingProvider(async () => {
+          const [{ loadLocalBgeM3Config }, { LocalBgeM3Provider }] =
+            await Promise.all([
+              import("./adapters/embedding/local-bge-m3-config.js"),
+              import("./adapters/embedding/local-bge-m3-provider.js"),
+            ]);
+
+          return new LocalBgeM3Provider(loadLocalBgeM3Config(environment));
+        }),
     },
     llm: {},
     queue: {},
@@ -289,8 +305,27 @@ export function createLLMProviderFromEnv(
     embedding: {},
     llm: {
       anthropic: () =>
-        new AnthropicLLMProvider(loadAnthropicLLMConfig(environment)),
-      gemini: () => new GeminiLLMProvider(loadGeminiLLMConfig(environment)),
+        new LazyLLMProvider(async () => {
+          const [{ loadAnthropicLLMConfig }, { AnthropicLLMProvider }] =
+            await Promise.all([
+              import("./adapters/llm/anthropic-llm-config.js"),
+              import("./adapters/llm/anthropic-llm-provider.js"),
+            ]);
+
+          return new AnthropicLLMProvider(
+            loadAnthropicLLMConfig(environment),
+          );
+        }),
+      gemini: () =>
+        new LazyLLMProvider(async () => {
+          const [{ loadGeminiLLMConfig }, { GeminiLLMProvider }] =
+            await Promise.all([
+              import("./adapters/llm/gemini-llm-config.js"),
+              import("./adapters/llm/gemini-llm-provider.js"),
+            ]);
+
+          return new GeminiLLMProvider(loadGeminiLLMConfig(environment));
+        }),
       mock: () => new MockLLMProvider(),
     },
     queue: {},
@@ -321,31 +356,74 @@ export function createVectorStoreFromEnv(
   return new ProviderFactory(config, registry).createVectorStore();
 }
 
-class LazyLLMProvider implements ILLMProvider {
-  private provider: ILLMProvider | undefined;
+class LazyEmbeddingProvider implements IEmbeddingProvider {
+  readonly dimensions = LOCAL_BGE_M3_DIMENSIONS;
 
-  constructor(private readonly createProvider: () => ILLMProvider) {}
+  private providerPromise: Promise<IEmbeddingProvider> | undefined;
+
+  constructor(
+    private readonly createProvider: () => Promise<IEmbeddingProvider>,
+  ) {}
+
+  async embed(text: string): Promise<number[]> {
+    return (await this.resolve()).embed(text);
+  }
+
+  async embedBatch(texts: readonly string[]): Promise<number[][]> {
+    return (await this.resolve()).embedBatch(texts);
+  }
+
+  private async resolve(): Promise<IEmbeddingProvider> {
+    if (!this.providerPromise) {
+      const loading = this.createProvider();
+      this.providerPromise = loading;
+      void loading.catch(() => {
+        if (this.providerPromise === loading) {
+          this.providerPromise = undefined;
+        }
+      });
+    }
+
+    try {
+      return await this.providerPromise;
+    } catch (error) {
+      throw new ProviderConfigurationError("embedding", { cause: error });
+    }
+  }
+}
+
+class LazyLLMProvider implements ILLMProvider {
+  private providerPromise: Promise<ILLMProvider> | undefined;
+
+  constructor(
+    private readonly createProvider: () => ILLMProvider | Promise<ILLMProvider>,
+  ) {}
 
   async generateStructuredJSON<T>(
     input: Parameters<ILLMProvider["generateStructuredJSON"]>[0],
   ): Promise<T> {
-    return this.resolve().generateStructuredJSON<T>(input);
+    return (await this.resolve()).generateStructuredJSON<T>(input);
   }
 
   async generateText(
     input: Parameters<ILLMProvider["generateText"]>[0],
   ): Promise<Awaited<ReturnType<ILLMProvider["generateText"]>>> {
-    return this.resolve().generateText(input);
+    return (await this.resolve()).generateText(input);
   }
 
-  private resolve(): ILLMProvider {
-    if (this.provider) {
-      return this.provider;
+  private async resolve(): Promise<ILLMProvider> {
+    if (!this.providerPromise) {
+      const loading = Promise.resolve(this.createProvider());
+      this.providerPromise = loading;
+      void loading.catch(() => {
+        if (this.providerPromise === loading) {
+          this.providerPromise = undefined;
+        }
+      });
     }
 
     try {
-      this.provider = this.createProvider();
-      return this.provider;
+      return await this.providerPromise;
     } catch (error) {
       throw new ProviderConfigurationError("llm", { cause: error });
     }

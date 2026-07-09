@@ -21,6 +21,7 @@ export const testDocumentConfig: DocumentConfig = {
   maxFileSizeBytes: DEFAULT_DOCUMENT_MAX_SIZE_BYTES,
   processingAttempts: 3,
   processingQueue: "document-processing",
+  uploadOnly: false,
   uploadUrlExpiresSeconds: 900,
 };
 

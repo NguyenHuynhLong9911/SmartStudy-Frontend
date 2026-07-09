@@ -171,6 +171,23 @@ export class DocumentService implements IDocumentService {
       throw new InvalidDocumentStateError(document.status);
     }
 
+    if (this.config.uploadOnly) {
+      await this.repository.replaceChunksAndMarkReady({
+        chapters: [],
+        chunks: [],
+        documentId: document.id,
+        pageCount: 1,
+        userId,
+      });
+
+      return toDocumentSummary({
+        ...document,
+        chapters: [],
+        pageCount: 1,
+        status: "ready",
+      });
+    }
+
     await this.queueProvider.enqueue<ProcessDocumentJob>(
       this.config.processingQueue,
       {

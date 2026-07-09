@@ -41,6 +41,22 @@ describe("S3-compatible storage config", () => {
     });
   });
 
+  it("treats empty optional Lambda environment values as unset", () => {
+    expect(
+      loadS3CompatibleStorageConfig({
+        STORAGE_BUCKET: "smartstudy-documents",
+        STORAGE_ENDPOINT: "",
+        STORAGE_FORCE_PATH_STYLE: "",
+        STORAGE_PUBLIC_ENDPOINT: "",
+      }),
+    ).toEqual({
+      bucket: "smartstudy-documents",
+      defaultUrlExpiresSeconds: 900,
+      forcePathStyle: false,
+      region: "us-east-1",
+    });
+  });
+
   it.each([
     { STORAGE_ACCESS_KEY: "access", STORAGE_BUCKET: "bucket" },
     { STORAGE_BUCKET: "bucket", STORAGE_SECRET_KEY: "secret" },

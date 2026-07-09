@@ -7,6 +7,7 @@ import {
   type RefreshTokenRecord,
   type RotateRefreshTokenInput,
   type SaveRefreshTokenInput,
+  type UpsertExternalAuthUserInput,
 } from "../../modules/auth/auth-repository.js";
 import type { UserRole } from "../../ports/index.js";
 
@@ -65,6 +66,30 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
 
     return user ? mapUser(user) : null;
+  }
+
+  async upsertExternalUser(
+    input: UpsertExternalAuthUserInput,
+  ): Promise<AuthUserRecord> {
+    const user = await this.prisma.user.upsert({
+      create: {
+        email: input.email,
+        emailVerified: input.emailVerified,
+        fullName: input.fullName ?? null,
+        id: input.id,
+        passwordHash: "managed-by-cognito",
+      },
+      update: {
+        email: input.email,
+        emailVerified: input.emailVerified,
+        ...(input.fullName ? { fullName: input.fullName } : {}),
+      },
+      where: {
+        id: input.id,
+      },
+    });
+
+    return mapUser(user);
   }
 
   async revokeRefreshToken(

@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 
+import { createCorsMiddleware } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { createAuthRouter } from "./modules/auth/auth-routes.js";
 import { createChatRouter } from "./modules/chat/chat-routes.js";
@@ -32,6 +33,24 @@ export function createApp(dependencies: AppDependencies): Express {
   const app = express();
 
   app.disable("x-powered-by");
+  app.use(createCorsMiddleware());
+  app.use((request, _response, next) => {
+    if (Buffer.isBuffer(request.body)) {
+      const contentType = request.headers["content-type"] ?? "";
+
+      if (String(contentType).includes("application/json")) {
+        try {
+          request.body = JSON.parse(request.body.toString("utf8") || "{}");
+        } catch (error) {
+          next(error);
+          return;
+        }
+      } else {
+        delete (request as { body?: unknown }).body;
+      }
+    }
+    next();
+  });
   app.use(express.json());
 
   app.get("/health", (_request, response) => {

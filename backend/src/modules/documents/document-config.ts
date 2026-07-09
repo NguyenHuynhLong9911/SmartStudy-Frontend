@@ -25,6 +25,7 @@ const documentEnvironmentSchema = z.object({
     .max(10)
     .default(3),
   DOCUMENT_PROCESSING_QUEUE: queueNameSchema.default("document-processing"),
+  DOCUMENT_UPLOAD_ONLY: z.coerce.boolean().default(false),
   DOCUMENT_CHUNK_MAX_TOKENS: z.coerce
     .number()
     .int()
@@ -60,6 +61,7 @@ export interface DocumentConfig {
   readonly maxFileSizeBytes: number;
   readonly processingAttempts: number;
   readonly processingQueue: string;
+  readonly uploadOnly: boolean;
   readonly uploadUrlExpiresSeconds: number;
 }
 
@@ -74,6 +76,7 @@ export function loadDocumentConfig(
     maxFileSizeBytes: parsed.DOCUMENT_MAX_SIZE_BYTES,
     processingAttempts: parsed.DOCUMENT_PROCESSING_ATTEMPTS,
     processingQueue: parsed.DOCUMENT_PROCESSING_QUEUE,
+    uploadOnly: parsed.DOCUMENT_UPLOAD_ONLY,
     uploadUrlExpiresSeconds:
       parsed.DOCUMENT_UPLOAD_URL_EXPIRES_SECONDS,
   };
