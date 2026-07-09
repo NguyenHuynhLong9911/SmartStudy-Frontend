@@ -11,11 +11,13 @@ import {
 
 export const App: React.FC = () => {
   const auth = useAuth();
+  const [sessionExpired, setSessionExpired] = React.useState(false);
 
   React.useEffect(() => {
     const handleAuthExpired = () => {
       if (!auth.isLoading) {
-        void auth.signinRedirect();
+        setSessionExpired(true);
+        void auth.removeUser();
       }
     };
 
@@ -59,9 +61,14 @@ export const App: React.FC = () => {
             <span className="text-xl font-black">S</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight mb-3">SmartStudy</h1>
-          <p className="text-sm text-[#707882] mb-8">Please sign in to continue.</p>
+          <p className="text-sm text-[#707882] mb-8">
+            {sessionExpired ? 'Your session expired. Please sign in again.' : 'Please sign in to continue.'}
+          </p>
           <button
-            onClick={() => void auth.signinRedirect()}
+            onClick={() => {
+              setSessionExpired(false);
+              void auth.signinRedirect();
+            }}
             className="w-full rounded-lg bg-[#0073BB] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#005f99] transition-colors"
           >
             Sign in with Cognito

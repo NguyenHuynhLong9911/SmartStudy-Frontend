@@ -170,6 +170,18 @@ resources:
         VpcEndpointType: Interface
         VpcId: ${self:custom.vpcId}
 
+    CognitoIdpVpcEndpoint:
+      Type: AWS::EC2::VPCEndpoint
+      Properties:
+        PrivateDnsEnabled: true
+        SecurityGroupIds:
+          - Ref: VpcEndpointSecurityGroup
+        ServiceName:
+          Fn::Sub: com.amazonaws.${AWS::Region}.cognito-idp
+        SubnetIds: ${self:custom.subnetIds}
+        VpcEndpointType: Interface
+        VpcId: ${self:custom.vpcId}
+
     S3GatewayEndpoint:
       Type: AWS::EC2::VPCEndpoint
       Properties:
