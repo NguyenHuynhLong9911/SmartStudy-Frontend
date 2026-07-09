@@ -71,22 +71,55 @@ export class PrismaAuthRepository implements IAuthRepository {
   async upsertExternalUser(
     input: UpsertExternalAuthUserInput,
   ): Promise<AuthUserRecord> {
-    const user = await this.prisma.user.upsert({
-      create: {
-        email: input.email,
-        emailVerified: input.emailVerified,
-        fullName: input.fullName ?? null,
-        id: input.id,
-        passwordHash: "managed-by-cognito",
-      },
-      update: {
-        email: input.email,
-        emailVerified: input.emailVerified,
-        ...(input.fullName ? { fullName: input.fullName } : {}),
-      },
-      where: {
-        id: input.id,
-      },
+    const user = await this.prisma.$transaction(async (transaction) => {
+      const existingById = await transaction.user.findUnique({
+        where: {
+          id: input.id,
+        },
+      });
+
+      if (existingById) {
+        return transaction.user.update({
+          data: {
+            email: input.email,
+            emailVerified: input.emailVerified,
+            ...(input.fullName ? { fullName: input.fullName } : {}),
+          },
+          where: {
+            id: input.id,
+          },
+        });
+      }
+
+      const existingByEmail = await transaction.user.findUnique({
+        where: {
+          email: input.email,
+        },
+      });
+
+      if (existingByEmail) {
+        return transaction.user.update({
+          data: {
+            emailVerified: input.emailVerified,
+            ...(input.fullName ? { fullName: input.fullName } : {}),
+            id: input.id,
+            passwordHash: "managed-by-cognito",
+          },
+          where: {
+            email: input.email,
+          },
+        });
+      }
+
+      return transaction.user.create({
+        data: {
+          email: input.email,
+          emailVerified: input.emailVerified,
+          fullName: input.fullName ?? null,
+          id: input.id,
+          passwordHash: "managed-by-cognito",
+        },
+      });
     });
 
     return mapUser(user);
