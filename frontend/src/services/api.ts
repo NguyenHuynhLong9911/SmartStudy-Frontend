@@ -1,4 +1,5 @@
 import axios, { InternalAxiosRequestConfig } from 'axios';
+import { cognitoStoragePrefix } from '../auth/cognito';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -81,8 +82,12 @@ const redirectToWelcome = () => {
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = getAccessToken();
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const cognitoToken = getCognitoAccessToken();
+    if (config.headers) {
+      const accessToken = cognitoToken || token;
+      if (accessToken) {
+        config.headers.Authorization = `Bearer ${accessToken}`;
+      }
     }
     return config;
   },
@@ -126,3 +131,48 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+function getCognitoAccessToken(): string | null {
+  return readOidcAccessToken(sessionStorage) ?? readOidcAccessToken(localStorage);
+}
+
+function readOidcAccessToken(storage: Storage): string | null {
+  const direct = storage.getItem(cognitoStoragePrefix);
+  if (direct) {
+    return parseOidcAccessToken(direct);
+  }
+
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key?.startsWith('oidc.user:')) {
+      continue;
+    }
+
+    const token = parseOidcAccessToken(storage.getItem(key));
+    if (token) {
+      return token;
+    }
+  }
+
+  return null;
+}
+
+function parseOidcAccessToken(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { access_token?: string; expires_at?: number };
+    if (
+      parsed.access_token &&
+      (!parsed.expires_at || parsed.expires_at > Math.floor(Date.now() / 1000))
+    ) {
+      return parsed.access_token;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}

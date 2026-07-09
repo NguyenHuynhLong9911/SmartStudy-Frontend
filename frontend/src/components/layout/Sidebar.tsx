@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
+import { useAuth } from 'react-oidc-context';
 import {
   LayoutDashboard,
   BookOpen,
@@ -11,20 +12,20 @@ import {
   Sparkles,
   User as UserIcon,
 } from 'lucide-react';
-import { authService, getStoredUser } from '../../services';
+import { clearAuth } from '../../services';
 import { clsx } from 'clsx';
 
 export const Sidebar: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const navigate = useNavigate();
-  const user = getStoredUser() || { name: 'Giảng viên AI', email: 'teacher@smartstudy.ai' };
+  const auth = useAuth();
+  const user = {
+    email: auth.user?.profile.email,
+    name: auth.user?.profile.name || auth.user?.profile.email,
+  };
 
   const handleLogout = async () => {
-    try {
-      await authService.logout();
-    } finally {
-      navigate('/welcome');
-    }
+    clearAuth();
+    await auth.signoutRedirect();
   };
 
   const navItems = [
@@ -41,7 +42,6 @@ export const Sidebar: React.FC = () => {
         isCollapsed ? 'w-20' : 'w-[280px]'
       )}
     >
-      {/* Brand Header */}
       <div className="flex items-center justify-between px-5 h-20 border-b border-white/10">
         <NavLink to="/dashboard" className="flex items-center gap-3 overflow-hidden">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0073BB] to-[#8A2BE2] flex items-center justify-center shrink-0 shadow-md">
@@ -64,7 +64,6 @@ export const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      {/* Navigation Links */}
       <nav className="flex-1 py-6 px-3 space-y-1.5 overflow-y-auto">
         {!isCollapsed && (
           <div className="px-3 mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#707882]">
@@ -92,7 +91,12 @@ export const Sidebar: React.FC = () => {
                   {isActive && !isCollapsed && (
                     <span className="absolute left-0 top-2 bottom-2 w-1 bg-[#8A2BE2] rounded-r-full animate-fadeIn" />
                   )}
-                  <Icon className={clsx('w-5 h-5 shrink-0 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-[#9CCAFF]')} />
+                  <Icon
+                    className={clsx(
+                      'w-5 h-5 shrink-0 transition-transform group-hover:scale-110',
+                      isActive ? 'text-white' : 'text-[#9CCAFF]'
+                    )}
+                  />
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
                 </>
               )}
@@ -101,7 +105,6 @@ export const Sidebar: React.FC = () => {
         })}
       </nav>
 
-      {/* User Profile & Logout Bottom Section */}
       <div className="p-4 border-t border-white/10 bg-black/20">
         <div className={clsx('flex items-center gap-3', isCollapsed && 'justify-center')}>
           <div className="w-10 h-10 rounded-full bg-[#0073BB]/30 border border-[#0073BB] flex items-center justify-center shrink-0 text-white font-semibold">
@@ -114,7 +117,7 @@ export const Sidebar: React.FC = () => {
             </div>
           )}
           <button
-            onClick={handleLogout}
+            onClick={() => void handleLogout()}
             className="p-2 rounded-lg text-[#FFDAD6] hover:bg-[#BA1A1A]/20 transition-colors shrink-0"
             title="Đăng xuất"
           >
