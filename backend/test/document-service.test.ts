@@ -230,6 +230,21 @@ describe("DocumentService", () => {
     );
   });
 
+  it.each([
+    "application/pdf; charset=binary",
+    "application/pdf, application/pdf",
+  ])("accepts browser/S3 PDF content type variant %s", async (contentType) => {
+    vi.mocked(storageProvider.getMetadata).mockResolvedValueOnce({
+      contentLength: 42,
+      contentType,
+    });
+
+    await expect(service.completeUpload(documentId, userId)).resolves.toMatchObject({
+      status: "processing",
+    });
+    expect(repository.markProcessing).toHaveBeenCalledWith(documentId, userId);
+  });
+
   it("maps a missing storage object to an upload conflict", async () => {
     vi.mocked(storageProvider.getMetadata).mockRejectedValueOnce(
       new StorageObjectNotFoundError(fileKey),

@@ -273,7 +273,7 @@ export class DocumentService implements IDocumentService {
     }
 
     if (
-      metadata.contentType !== PDF_CONTENT_TYPE ||
+      !isPdfContentType(metadata.contentType) ||
       metadata.contentLength !== document.sizeBytes
     ) {
       throw new UploadMetadataMismatchError();
@@ -312,6 +312,17 @@ function validateUploadRequest(
 
 function createDocumentFileKey(userId: string, documentId: string): string {
   return `users/${userId}/documents/${documentId}.pdf`;
+}
+
+function isPdfContentType(contentType: string | undefined): boolean {
+  if (!contentType) {
+    return false;
+  }
+
+  return contentType
+    .split(",")
+    .map((part) => part.split(";")[0]?.trim().toLowerCase())
+    .every((part) => part === PDF_CONTENT_TYPE);
 }
 
 function toDocumentSummary(document: DocumentRecord): DocumentSummary {
