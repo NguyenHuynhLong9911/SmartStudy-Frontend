@@ -72,11 +72,21 @@ export const ExamCenterPage: React.FC = () => {
     if (!selectedDocId) return;
     setIsGenerating(true);
     try {
-      const quiz = await quizService.generateQuiz(selectedDocId, undefined, numQuestions);
+      const quiz = await quizService.generateQuiz(
+        selectedDocId,
+        undefined,
+        numQuestions,
+      );
       setActiveQuiz(quiz);
       setActiveExam(null);
       setUserAnswers({});
       setTimeLeftSeconds(numQuestions * 60 * 2); // 2 mins per question for quiz
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Ensure generator view doesn't get stuck without feedback
+      // eslint-disable-next-line no-console
+      console.error('generateQuiz failed:', message);
+      alert(`Tạo Quiz thất bại: ${message}`);
     } finally {
       setIsGenerating(false);
     }
