@@ -4,6 +4,7 @@ export * from './api';
 import {
   AuthResponse,
   Document,
+  DocumentDownloadUrlResponse,
   PresignedUploadResponse,
   Conversation,
   Message,
@@ -107,6 +108,11 @@ export const documentService = {
   async completeDocument(id: string): Promise<Document> {
     const response = await api.post<{ document: Document }>(`/documents/${id}/complete`, {});
     return response.data.document;
+  },
+
+  async getDownloadUrl(id: string): Promise<string> {
+    const response = await api.get<DocumentDownloadUrlResponse>(`/documents/${id}/download-url`);
+    return response.data.url;
   },
 
   async deleteDocument(id: string): Promise<void> {

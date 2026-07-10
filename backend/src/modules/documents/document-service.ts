@@ -68,6 +68,10 @@ export interface DocumentUploadResult {
   readonly upload: PresignedUpload;
 }
 
+export interface DocumentDownloadResult {
+  readonly url: string;
+}
+
 export interface ProcessDocumentJob {
   readonly documentId: string;
   readonly fileKey: string;
@@ -81,6 +85,10 @@ export interface IDocumentService {
   ): Promise<DocumentSummary>;
   deleteDocument(documentId: string, userId: string): Promise<void>;
   getDocument(documentId: string, userId: string): Promise<DocumentDetail>;
+  getDocumentDownloadUrl(
+    documentId: string,
+    userId: string,
+  ): Promise<DocumentDownloadResult>;
   listDocuments(input: ListDocumentsInput): Promise<ListDocumentsResult>;
   requestUpload(
     input: RequestDocumentUploadInput,
@@ -262,6 +270,25 @@ export class DocumentService implements IDocumentService {
     }
 
     return toDocumentDetail(document);
+  }
+
+  async getDocumentDownloadUrl(
+    documentId: string,
+    userId: string,
+  ): Promise<DocumentDownloadResult> {
+    const document = await this.repository.findOwnedById(documentId, userId);
+
+    if (!document) {
+      throw new DocumentNotFoundError();
+    }
+
+    if (document.status !== "ready") {
+      throw new InvalidDocumentStateError(document.status);
+    }
+
+    return {
+      url: await this.storageProvider.getDownloadUrl(document.fileKey),
+    };
   }
 
   async listDocuments(

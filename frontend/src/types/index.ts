@@ -55,6 +55,10 @@ export interface PresignedUploadResponse {
   };
 }
 
+export interface DocumentDownloadUrlResponse {
+  url: string;
+}
+
 // RAG Chat & Conversation Types
 export interface Citation {
   documentId: string;

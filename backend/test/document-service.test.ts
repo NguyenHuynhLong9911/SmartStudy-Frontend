@@ -506,6 +506,30 @@ describe("DocumentService", () => {
     );
   });
 
+  it("returns a download URL for ready owned documents", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce(
+      createDocument("ready"),
+    );
+
+    await expect(
+      service.getDocumentDownloadUrl(documentId, userId),
+    ).resolves.toEqual({
+      url: "https://storage.example.test/download",
+    });
+    expect(storageProvider.getDownloadUrl).toHaveBeenCalledWith(fileKey);
+  });
+
+  it("rejects download URLs for documents that are not ready", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce(
+      createDocument("processing"),
+    );
+
+    await expect(
+      service.getDocumentDownloadUrl(documentId, userId),
+    ).rejects.toThrow(InvalidDocumentStateError);
+    expect(storageProvider.getDownloadUrl).not.toHaveBeenCalled();
+  });
+
   it("deletes storage before soft-deleting the owned document", async () => {
     await expect(
       service.deleteDocument(documentId, userId),

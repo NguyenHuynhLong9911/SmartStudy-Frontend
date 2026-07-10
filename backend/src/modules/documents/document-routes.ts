@@ -70,6 +70,20 @@ export function createDocumentRouter(
   );
 
   router.get(
+    "/:documentId/download-url",
+    handle(async (request, response) => {
+      const { documentId } = documentIdParamsSchema.parse(request.params);
+      const claims = getAuthClaims(response);
+      const result = await documentService.getDocumentDownloadUrl(
+        documentId,
+        claims.sub,
+      );
+
+      response.status(200).json(result);
+    }),
+  );
+
+  router.get(
     "/:documentId",
     handle(async (request, response) => {
       const { documentId } = documentIdParamsSchema.parse(request.params);
