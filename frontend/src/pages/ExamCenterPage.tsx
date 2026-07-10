@@ -82,11 +82,12 @@ export const ExamCenterPage: React.FC = () => {
       setUserAnswers({});
       setTimeLeftSeconds(numQuestions * 60 * 2); // 2 mins per question for quiz
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Ensure generator view doesn't get stuck without feedback
       // eslint-disable-next-line no-console
-      console.error('generateQuiz failed:', message);
-      alert(`Tạo Quiz thất bại: ${message}`);
+      console.error('generateQuiz failed:', error);
+
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as any).message) : String(error);
+      // Ensure generator view doesn't get stuck without feedback
+      alert(`Tạo Quiz thất bại: ${msg}`);
     } finally {
       setIsGenerating(false);
     }
@@ -101,6 +102,12 @@ export const ExamCenterPage: React.FC = () => {
       setActiveQuiz(null);
       setUserAnswers({});
       setTimeLeftSeconds(durationMinutes * 60);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('generateExam failed:', error);
+
+      const msg = error && typeof error === 'object' && 'message' in error ? String((error as any).message) : String(error);
+      alert(`Tạo Exam thất bại: ${msg}`);
     } finally {
       setIsGenerating(false);
     }
