@@ -271,6 +271,18 @@ export class DocumentService implements IDocumentService {
       throw new DocumentNotFoundError();
     }
 
+    if (document.status === "ready") {
+      const downloadUrl = await this.storageProvider.getDownloadUrl(
+        document.fileKey,
+      );
+
+      return {
+        ...toDocumentDetail(document),
+        downloadUrl,
+        previewUrl: downloadUrl,
+      };
+    }
+
     return toDocumentDetail(document);
   }
 

@@ -471,7 +471,7 @@ describe("DocumentService", () => {
     });
   });
 
-  it("returns document detail without exposing storage internals", async () => {
+  it("returns ready document detail with preview URLs", async () => {
     vi.mocked(repository.findOwnedById).mockResolvedValueOnce({
       ...createDocument("ready"),
       chapters: [
@@ -493,12 +493,15 @@ describe("DocumentService", () => {
         },
       ],
       createdAt,
+      downloadUrl: "https://storage.example.test/download",
       id: documentId,
       pageCount: 2,
+      previewUrl: "https://storage.example.test/download",
       sizeBytes: 42,
       status: "ready",
       title: "Study guide",
     });
+    expect(storageProvider.getDownloadUrl).toHaveBeenCalledWith(fileKey);
   });
 
   it("does not expose whether another user's detail exists", async () => {
