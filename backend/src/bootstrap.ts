@@ -81,6 +81,11 @@ export function createApiRuntime(
     quizRepository,
     documentRepository,
     llmProvider,
+    {
+      documentConfig,
+      pdfTextExtractor: new LazyPdfTextExtractor(),
+      storageProvider,
+    },
   );
   const examService = new ExamService(
     new PrismaExamRepository(prisma),

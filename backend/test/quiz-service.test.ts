@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -16,7 +18,8 @@ import type {
   QuizRecord,
 } from "../src/modules/quiz/quiz-repository.js";
 import { QuizService } from "../src/modules/quiz/quiz-service.js";
-import type { ILLMProvider } from "../src/ports/index.js";
+import type { IPdfTextExtractor } from "../src/modules/documents/pdf-processing.js";
+import type { ILLMProvider, IStorageProvider } from "../src/ports/index.js";
 
 const userId = "22222222-2222-4222-8222-222222222222";
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -224,16 +227,27 @@ describe("QuizService", () => {
       expect(quizRepository.save).toHaveBeenCalledTimes(1);
     });
 
-    it("throws QuizGenerationError after 3 failed retries", async () => {
-      const { generateStructuredJSON, service } = createServiceStubs();
+    it("falls back to local questions after 3 failed LLM retries", async () => {
+      const { generateStructuredJSON, quizRepository, service } =
+        createServiceStubs();
       generateStructuredJSON.mockRejectedValue(
         new Error("LLM provider unavailable"),
       );
 
-      await expect(service.generateQuiz({ documentId, userId })).rejects.toThrow(
-        QuizGenerationError,
-      );
+      const result = await service.generateQuiz({ documentId, userId });
+
+      expect(result.questions).toHaveLength(5);
+      expect(result.questions[0]?.question_id).toBe("local-q-1");
       expect(generateStructuredJSON).toHaveBeenCalledTimes(3);
+      expect(quizRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          questions: expect.arrayContaining([
+            expect.objectContaining({
+              question_id: "local-q-1",
+            }),
+          ]),
+        }),
+      );
     });
 
     it("throws QuizDocumentNotFoundError when document not owned", async () => {
@@ -261,6 +275,65 @@ describe("QuizService", () => {
 
       await expect(service.generateQuiz({ documentId, userId })).rejects.toThrow(
         QuizGenerationError,
+      );
+    });
+
+    it("extracts PDF text when upload-only documents have no chunks", async () => {
+      const {
+        documentRepository,
+        generateStructuredJSON,
+        quizRepository,
+      } = createServiceStubs();
+      vi.mocked(documentRepository.listChunks).mockResolvedValueOnce([]);
+
+      const storageProvider: IStorageProvider = {
+        delete: vi.fn(),
+        download: vi.fn(async () => Readable.from([Buffer.from("%PDF")])),
+        getDownloadUrl: vi.fn(),
+        getMetadata: vi.fn(),
+        getUploadUrl: vi.fn(),
+        upload: vi.fn(),
+      };
+      const pdfTextExtractor: IPdfTextExtractor = {
+        extract: vi.fn(async () => ({
+          pageCount: 1,
+          pages: [
+            {
+              pageNumber: 1,
+              text: "Serverless architecture uses AWS Lambda and API Gateway to run backend APIs without managing servers.",
+            },
+          ],
+        })),
+      };
+      const service = new QuizService(
+        quizRepository,
+        documentRepository,
+        {
+          generateStructuredJSON:
+            generateStructuredJSON as unknown as ILLMProvider["generateStructuredJSON"],
+          generateText: vi.fn(),
+        },
+        {
+          documentConfig: { maxFileSizeBytes: 1_000 },
+          pdfTextExtractor,
+          storageProvider,
+        },
+      );
+
+      await service.generateQuiz({ documentId, numQuestions: 3, userId });
+
+      expect(storageProvider.download).toHaveBeenCalledWith(
+        `users/${userId}/documents/${documentId}.pdf`,
+      );
+      expect(pdfTextExtractor.extract).toHaveBeenCalledOnce();
+      expect(generateStructuredJSON).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            expect.objectContaining({
+              content: expect.stringContaining("Serverless architecture"),
+            }),
+          ],
+        }),
       );
     });
   });
