@@ -448,6 +448,7 @@ describe("DocumentService", () => {
           downloadUrl: "https://storage.example.test/download",
           id: documentId,
           pageCount: 3,
+          previewUrl: "https://storage.example.test/download",
           sizeBytes: 42,
           status: "ready",
           title: "Study guide",

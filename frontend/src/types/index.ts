@@ -32,6 +32,7 @@ export interface Document {
   chunkCount?: number;
   createdAt: string;
   downloadUrl?: string;
+  previewUrl?: string;
   updatedAt?: string;
   // Optional fields that may or may not be returned
   originalName?: string;

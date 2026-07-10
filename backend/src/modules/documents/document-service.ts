@@ -32,6 +32,7 @@ export interface DocumentSummary {
   readonly createdAt: Date;
   readonly downloadUrl?: string;
   readonly id: string;
+  readonly previewUrl?: string;
   readonly sizeBytes: number | null;
   readonly status: DocumentStatus;
   readonly title: string;
@@ -325,9 +326,14 @@ export class DocumentService implements IDocumentService {
       return toDocumentListItem(document);
     }
 
+    const downloadUrl = await this.storageProvider.getDownloadUrl(
+      document.fileKey,
+    );
+
     return {
       ...toDocumentListItem(document),
-      downloadUrl: await this.storageProvider.getDownloadUrl(document.fileKey),
+      downloadUrl,
+      previewUrl: downloadUrl,
     };
   }
 

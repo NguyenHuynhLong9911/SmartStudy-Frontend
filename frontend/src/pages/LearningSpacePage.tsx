@@ -23,15 +23,20 @@ export const LearningSpacePage: React.FC = () => {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
 
+  const fetchDocuments = async () => {
+    const docs = await documentService.listDocuments();
+    setDocuments(docs);
+    if (!selectedDocId && docs[0]) {
+      setSelectedDocId(docs[0].id);
+    }
+    return docs;
+  };
+
   useEffect(() => {
     const init = async () => {
       setIsLoading(true);
       try {
-        const docs = await documentService.listDocuments();
-        setDocuments(docs);
-        if (!selectedDocId && docs[0]) {
-          setSelectedDocId(docs[0].id);
-        }
+        await fetchDocuments();
       } finally {
         setIsLoading(false);
       }
@@ -59,7 +64,11 @@ export const LearningSpacePage: React.FC = () => {
 
       setIsPreviewLoading(true);
       try {
-        const url = currentDoc.downloadUrl || await documentService.getDownloadUrl(currentDoc.id);
+        const url = currentDoc.previewUrl || currentDoc.downloadUrl;
+        if (!url) {
+          setPreviewError('Preview link is not available yet. Refresh the document list and try again.');
+          return;
+        }
         setPreviewUrl(url);
       } catch (error) {
         setPreviewError(error instanceof Error ? error.message : 'Could not load PDF preview.');
@@ -168,7 +177,15 @@ export const LearningSpacePage: React.FC = () => {
                 setIsPreviewLoading(true);
                 setPreviewError('');
                 try {
-                  setPreviewUrl(await documentService.getDownloadUrl(currentDoc.id));
+                  const docs = await fetchDocuments();
+                  const refreshedDoc = docs.find((doc) => doc.id === currentDoc.id);
+                  const url = refreshedDoc?.previewUrl || refreshedDoc?.downloadUrl;
+                  if (!url) {
+                    setPreviewUrl('');
+                    setPreviewError('Preview link is not available yet. Refresh the page and try again.');
+                    return;
+                  }
+                  setPreviewUrl(url);
                 } catch (error) {
                   setPreviewError(error instanceof Error ? error.message : 'Could not refresh PDF preview.');
                 } finally {
