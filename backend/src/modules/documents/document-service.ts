@@ -30,6 +30,7 @@ export interface RequestDocumentUploadInput {
 
 export interface DocumentSummary {
   readonly createdAt: Date;
+  readonly downloadUrl?: string;
   readonly id: string;
   readonly sizeBytes: number | null;
   readonly status: DocumentStatus;
@@ -304,7 +305,9 @@ export class DocumentService implements IDocumentService {
     });
 
     return {
-      documents: result.documents.map(toDocumentListItem),
+      documents: await Promise.all(
+        result.documents.map((document) => this.toDocumentListItem(document)),
+      ),
       pagination: {
         limit: input.limit,
         page: input.page,
@@ -312,6 +315,19 @@ export class DocumentService implements IDocumentService {
         totalPages:
           result.total === 0 ? 0 : Math.ceil(result.total / input.limit),
       },
+    };
+  }
+
+  private async toDocumentListItem(
+    document: DocumentRecord,
+  ): Promise<DocumentListItem> {
+    if (document.status !== "ready") {
+      return toDocumentListItem(document);
+    }
+
+    return {
+      ...toDocumentListItem(document),
+      downloadUrl: await this.storageProvider.getDownloadUrl(document.fileKey),
     };
   }
 

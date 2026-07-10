@@ -59,7 +59,7 @@ export const LearningSpacePage: React.FC = () => {
 
       setIsPreviewLoading(true);
       try {
-        const url = await documentService.getDownloadUrl(currentDoc.id);
+        const url = currentDoc.downloadUrl || await documentService.getDownloadUrl(currentDoc.id);
         setPreviewUrl(url);
       } catch (error) {
         setPreviewError(error instanceof Error ? error.message : 'Could not load PDF preview.');

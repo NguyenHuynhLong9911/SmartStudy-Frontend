@@ -31,6 +31,7 @@ export interface Document {
   status: DocumentStatus;
   chunkCount?: number;
   createdAt: string;
+  downloadUrl?: string;
   updatedAt?: string;
   // Optional fields that may or may not be returned
   originalName?: string;

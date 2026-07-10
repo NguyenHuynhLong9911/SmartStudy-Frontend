@@ -445,6 +445,7 @@ describe("DocumentService", () => {
       documents: [
         {
           createdAt,
+          downloadUrl: "https://storage.example.test/download",
           id: documentId,
           pageCount: 3,
           sizeBytes: 42,
@@ -459,6 +460,7 @@ describe("DocumentService", () => {
         totalPages: 3,
       },
     });
+    expect(storageProvider.getDownloadUrl).toHaveBeenCalledWith(fileKey);
     expect(repository.listOwned).toHaveBeenCalledWith({
       limit: 10,
       page: 2,
