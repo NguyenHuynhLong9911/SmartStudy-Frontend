@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
 
 import {
   StorageObjectNotFoundError,
@@ -74,6 +75,13 @@ export interface DocumentDownloadResult {
   readonly url: string;
 }
 
+export interface DocumentFileResult {
+  readonly contentLength: number | null;
+  readonly contentType: string;
+  readonly filename: string;
+  readonly stream: Readable;
+}
+
 export interface ProcessDocumentJob {
   readonly documentId: string;
   readonly fileKey: string;
@@ -91,6 +99,7 @@ export interface IDocumentService {
     documentId: string,
     userId: string,
   ): Promise<DocumentDownloadResult>;
+  getDocumentFile(documentId: string, userId: string): Promise<DocumentFileResult>;
   listDocuments(input: ListDocumentsInput): Promise<ListDocumentsResult>;
   requestUpload(
     input: RequestDocumentUploadInput,
@@ -305,6 +314,28 @@ export class DocumentService implements IDocumentService {
     };
   }
 
+  async getDocumentFile(
+    documentId: string,
+    userId: string,
+  ): Promise<DocumentFileResult> {
+    const document = await this.repository.findOwnedById(documentId, userId);
+
+    if (!document) {
+      throw new DocumentNotFoundError();
+    }
+
+    if (document.status !== "ready") {
+      throw new InvalidDocumentStateError(document.status);
+    }
+
+    return {
+      contentLength: document.sizeBytes,
+      contentType: PDF_CONTENT_TYPE,
+      filename: `${sanitizeFilename(document.title)}.pdf`,
+      stream: await this.storageProvider.download(document.fileKey),
+    };
+  }
+
   async listDocuments(
     input: ListDocumentsInput,
   ): Promise<ListDocumentsResult> {
@@ -369,6 +400,16 @@ export class DocumentService implements IDocumentService {
       throw new UploadMetadataMismatchError();
     }
   }
+}
+
+function sanitizeFilename(value: string): string {
+  const sanitized = value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+
+  return sanitized || "document";
 }
 
 function validateUploadRequest(

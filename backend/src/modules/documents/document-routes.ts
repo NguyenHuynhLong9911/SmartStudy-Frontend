@@ -1,3 +1,5 @@
+import { pipeline } from "node:stream/promises";
+
 import { Router, type NextFunction, type Request, type Response } from "express";
 
 import { getAuthClaims, requireAuth } from "../../middleware/require-auth.js";
@@ -80,6 +82,30 @@ export function createDocumentRouter(
       );
 
       response.status(200).json(result);
+    }),
+  );
+
+  router.get(
+    "/:documentId/file",
+    handle(async (request, response) => {
+      const { documentId } = documentIdParamsSchema.parse(request.params);
+      const claims = getAuthClaims(response);
+      const result = await documentService.getDocumentFile(
+        documentId,
+        claims.sub,
+      );
+
+      response.setHeader("Content-Type", result.contentType);
+      response.setHeader(
+        "Content-Disposition",
+        `attachment; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+      );
+
+      if (result.contentLength !== null) {
+        response.setHeader("Content-Length", result.contentLength.toString());
+      }
+
+      await pipeline(result.stream, response);
     }),
   );
 

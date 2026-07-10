@@ -115,6 +115,25 @@ export const documentService = {
     return response.data.url;
   },
 
+  async downloadDocumentFile(id: string, title: string): Promise<void> {
+    try {
+      const response = await api.get<Blob>(`/documents/${id}/file`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${sanitizeFilename(title)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      throw normalizeApiError(error, 'Downloading the PDF failed. Please try again.');
+    }
+  },
+
   async deleteDocument(id: string): Promise<void> {
     await api.delete(`/documents/${id}`);
   },
@@ -231,4 +250,12 @@ function normalizeApiError(error: unknown, fallbackMessage: string): Error {
   }
 
   return error instanceof Error ? error : new Error(fallbackMessage);
+}
+
+function sanitizeFilename(value: string): string {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120) || 'document';
 }

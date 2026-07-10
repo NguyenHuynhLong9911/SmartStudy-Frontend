@@ -11,7 +11,9 @@ import type { ProcessDocumentJob } from "./modules/documents/document-service.js
 import type { QueueJob } from "./ports/index.js";
 
 const apiRuntime = createApiRuntime();
-const apiHandler = serverless(apiRuntime.app);
+const apiHandler = serverless(apiRuntime.app, {
+  binary: ["application/pdf"],
+});
 let processorRuntime:
   | ReturnType<typeof createDocumentProcessorRuntime>
   | undefined;

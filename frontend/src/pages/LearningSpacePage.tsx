@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   CheckCircle2,
-  ExternalLink,
+  Download,
   FileText,
   Info,
   RefreshCw,
@@ -19,9 +19,8 @@ export const LearningSpacePage: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocId, setSelectedDocId] = useState(docIdParam || '');
   const [isLoading, setIsLoading] = useState(true);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   const fetchDocuments = async () => {
     const docs = await documentService.listDocuments();
@@ -61,35 +60,19 @@ export const LearningSpacePage: React.FC = () => {
 
   const currentDoc = documents.find((doc) => doc.id === selectedDocId) || documents[0];
 
-  useEffect(() => {
-    const loadPreview = async () => {
-      setPreviewUrl('');
-      setPreviewError('');
+  const handleDownload = async () => {
+    if (!currentDoc || currentDoc.status !== 'ready') return;
 
-      if (!currentDoc || currentDoc.status !== 'ready') {
-        return;
-      }
-
-      setIsPreviewLoading(true);
-      try {
-        const detail = currentDoc.previewUrl || currentDoc.downloadUrl
-          ? currentDoc
-          : await documentService.getDocument(currentDoc.id);
-        const url = detail.previewUrl || detail.downloadUrl;
-        if (!url) {
-          setPreviewError('Preview link is not available yet. Refresh the document list and try again.');
-          return;
-        }
-        setPreviewUrl(url);
-      } catch (error) {
-        setPreviewError(error instanceof Error ? error.message : 'Could not load PDF preview.');
-      } finally {
-        setIsPreviewLoading(false);
-      }
-    };
-
-    void loadPreview();
-  }, [currentDoc?.id, currentDoc?.status, currentDoc?.previewUrl, currentDoc?.downloadUrl]);
+    setIsDownloading(true);
+    setDownloadError('');
+    try {
+      await documentService.downloadDocumentFile(currentDoc.id, currentDoc.title);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Could not download PDF.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -160,16 +143,16 @@ export const LearningSpacePage: React.FC = () => {
               </p>
             </div>
 
-            {previewUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                rightIcon={<ExternalLink size={14} />}
-                onClick={() => window.open(previewUrl, '_blank', 'noopener,noreferrer')}
-              >
-                Open PDF
-              </Button>
-            )}
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Download size={14} />}
+              isLoading={isDownloading}
+              disabled={currentDoc.status !== 'ready'}
+              onClick={handleDownload}
+            >
+              Download PDF
+            </Button>
           </div>
         </Card>
 
@@ -177,35 +160,18 @@ export const LearningSpacePage: React.FC = () => {
           <div className="flex items-center justify-between border-b border-[#E0E3E5] px-5 py-4">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-[#0073BB]" />
-              <h2 className="text-lg font-bold text-[#181C1E]">PDF Preview</h2>
+              <h2 className="text-lg font-bold text-[#181C1E]">PDF File</h2>
             </div>
             <Button
               variant="ghost"
               size="sm"
               leftIcon={<RefreshCw size={14} />}
               onClick={async () => {
-                if (!currentDoc || currentDoc.status !== 'ready') return;
-                setIsPreviewLoading(true);
-                setPreviewError('');
+                setDownloadError('');
                 try {
-                  const docs = await fetchDocuments();
-                  const refreshedDoc = docs.find((doc) => doc.id === currentDoc.id);
-                  const fallbackDoc = refreshedDoc || docs[0];
-                  if (!fallbackDoc) return;
-                  const detail = fallbackDoc.previewUrl || fallbackDoc.downloadUrl
-                    ? fallbackDoc
-                    : await documentService.getDocument(fallbackDoc.id);
-                  const url = detail.previewUrl || detail.downloadUrl;
-                  if (!url) {
-                    setPreviewUrl('');
-                    setPreviewError('Preview link is not available yet. Refresh the document list and try again.');
-                    return;
-                  }
-                  setPreviewUrl(url);
+                  await fetchDocuments();
                 } catch (error) {
-                  setPreviewError(error instanceof Error ? error.message : 'Could not refresh PDF preview.');
-                } finally {
-                  setIsPreviewLoading(false);
+                  setDownloadError(error instanceof Error ? error.message : 'Could not refresh document list.');
                 }
               }}
             >
@@ -213,36 +179,32 @@ export const LearningSpacePage: React.FC = () => {
             </Button>
           </div>
 
-          <div className="h-[720px] bg-[#F4F7F9]">
-            {isPreviewLoading ? (
-              <div className="flex h-full items-center justify-center">
-                <LoadingSpinner text="Loading PDF preview..." />
+          <div className="bg-[#F4F7F9] p-8">
+            <div className="mx-auto flex max-w-xl flex-col items-center gap-4 rounded-xl border border-[#E0E3E5] bg-white p-8 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#D0E4FF]/60 text-[#0073BB]">
+                <FileText size={28} />
               </div>
-            ) : previewError ? (
-              <div className="flex h-full items-center justify-center p-8 text-center">
-                <div className="max-w-md space-y-2">
-                  <Info className="mx-auto h-8 w-8 text-[#BA1A1A]" />
-                  <h3 className="text-base font-bold text-[#181C1E]">Preview unavailable</h3>
-                  <p className="text-sm text-[#707882]">{previewError}</p>
-                </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold text-[#181C1E]">{currentDoc.title}</h3>
+                <p className="text-sm text-[#707882]">
+                  Browser preview is disabled for now. Download the original PDF uploaded to S3.
+                </p>
               </div>
-            ) : previewUrl ? (
-              <iframe
-                title={`PDF preview: ${currentDoc.title}`}
-                src={previewUrl}
-                className="h-full w-full border-0"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center p-8 text-center">
-                <div className="max-w-md space-y-2">
-                  <Info className="mx-auto h-8 w-8 text-[#8A2BE2]" />
-                  <h3 className="text-base font-bold text-[#181C1E]">No preview yet</h3>
-                  <p className="text-sm text-[#707882]">
-                    The PDF must be in Ready status before the app can generate a secure preview link.
-                  </p>
-                </div>
-              </div>
-            )}
+              <Button
+                variant="primary"
+                leftIcon={<Download size={16} />}
+                isLoading={isDownloading}
+                disabled={currentDoc.status !== 'ready'}
+                onClick={handleDownload}
+              >
+                Download PDF
+              </Button>
+              {downloadError && (
+                <p className="rounded-lg bg-[#FCEEEE] px-3 py-2 text-sm font-medium text-[#BA1A1A]">
+                  {downloadError}
+                </p>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -252,7 +214,7 @@ export const LearningSpacePage: React.FC = () => {
             <h2 className="text-lg font-bold text-[#181C1E]">Text extraction is not enabled yet</h2>
           </div>
           <p className="text-sm leading-relaxed text-[#404751]">
-            This preview shows the original PDF file stored in S3. Searchable extracted text, summaries, chat, and quizzes will require a later PDF parser or AI/RAG processing step.
+            The original PDF is stored in S3 and can be downloaded here. Searchable extracted text, summaries, chat, and quizzes will require a later PDF parser or AI/RAG processing step.
           </p>
         </Card>
       </div>
