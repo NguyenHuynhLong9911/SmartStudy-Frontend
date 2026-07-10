@@ -63,6 +63,7 @@ function createDocument(
 
 function createRepository(): IDocumentRepository {
   return {
+    completeUploadedDocument: vi.fn(async () => true),
     createUploading: vi.fn(async (input) => ({
       ...createDocument(),
       ...input,
@@ -243,6 +244,56 @@ describe("DocumentService", () => {
       status: "processing",
     });
     expect(repository.markProcessing).toHaveBeenCalledWith(documentId, userId);
+  });
+
+  it("marks upload-only documents ready without enqueueing processing", async () => {
+    service = new DocumentService(
+      repository,
+      storageProvider,
+      queueProvider,
+      { ...config, uploadOnly: true },
+      { createId: () => documentId },
+    );
+
+    await expect(service.completeUpload(documentId, userId)).resolves.toEqual({
+      createdAt,
+      id: documentId,
+      sizeBytes: 42,
+      status: "ready",
+      title: "Study guide",
+    });
+    expect(storageProvider.getMetadata).toHaveBeenCalledWith(fileKey);
+    expect(repository.completeUploadedDocument).toHaveBeenCalledWith({
+      documentId,
+      pageCount: 1,
+      userId,
+    });
+    expect(repository.markProcessing).not.toHaveBeenCalled();
+    expect(queueProvider.enqueue).not.toHaveBeenCalled();
+  });
+
+  it("heals upload-only processing documents to ready", async () => {
+    vi.mocked(repository.findOwnedById).mockResolvedValueOnce(
+      createDocument("processing"),
+    );
+    service = new DocumentService(
+      repository,
+      storageProvider,
+      queueProvider,
+      { ...config, uploadOnly: true },
+      { createId: () => documentId },
+    );
+
+    await expect(service.completeUpload(documentId, userId)).resolves.toMatchObject({
+      status: "ready",
+    });
+    expect(storageProvider.getMetadata).toHaveBeenCalledWith(fileKey);
+    expect(repository.completeUploadedDocument).toHaveBeenCalledWith({
+      documentId,
+      pageCount: 1,
+      userId,
+    });
+    expect(queueProvider.enqueue).not.toHaveBeenCalled();
   });
 
   it("maps a missing storage object to an upload conflict", async () => {

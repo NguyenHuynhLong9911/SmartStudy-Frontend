@@ -54,6 +54,12 @@ export interface CompleteDocumentProcessingInput {
   readonly userId: string;
 }
 
+export interface CompleteUploadedDocumentInput {
+  readonly documentId: string;
+  readonly pageCount: number;
+  readonly userId: string;
+}
+
 export interface ListOwnedDocumentsInput {
   readonly limit: number;
   readonly page: number;
@@ -74,6 +80,9 @@ export interface ListDocumentChunksInput {
 }
 
 export interface IDocumentRepository {
+  completeUploadedDocument(
+    input: CompleteUploadedDocumentInput,
+  ): Promise<boolean>;
   createUploading(
     input: CreateUploadingDocumentInput,
   ): Promise<DocumentRecord>;

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client.js";
 import { toPgVectorLiteral } from "../vector/pg-vector-utils.js";
 import type {
   CompleteDocumentProcessingInput,
+  CompleteUploadedDocumentInput,
   CreateUploadingDocumentInput,
   DocumentChapter,
   DocumentChunkRecord,
@@ -27,6 +28,40 @@ const documentSelection = {
 
 export class PrismaDocumentRepository implements IDocumentRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async completeUploadedDocument(
+    input: CompleteUploadedDocumentInput,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (transaction) => {
+      const result = await transaction.document.updateMany({
+        data: {
+          chapters: [],
+          pageCount: input.pageCount,
+          status: "ready",
+        },
+        where: {
+          deleted: false,
+          id: input.documentId,
+          status: {
+            in: ["uploading", "processing"],
+          },
+          userId: input.userId,
+        },
+      });
+
+      if (result.count !== 1) {
+        return false;
+      }
+
+      await transaction.documentChunk.deleteMany({
+        where: {
+          documentId: input.documentId,
+        },
+      });
+
+      return true;
+    });
+  }
 
   async createUploading(
     input: CreateUploadingDocumentInput,

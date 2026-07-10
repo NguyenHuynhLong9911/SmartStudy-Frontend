@@ -181,6 +181,7 @@ function createServiceStubs() {
   };
 
   const documentRepository: IDocumentRepository = {
+    completeUploadedDocument: vi.fn(),
     createUploading: vi.fn(),
     findOwnedById: vi.fn(async (id, owner) =>
       id === documentId && owner === userId ? createDocument() : null,

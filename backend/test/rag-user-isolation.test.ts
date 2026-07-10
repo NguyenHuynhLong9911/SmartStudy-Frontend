@@ -253,6 +253,7 @@ function createChatRepository(): IChatRepository {
 
 function createDocumentRepository(): IDocumentRepository {
   return {
+    completeUploadedDocument: vi.fn(),
     createUploading: vi.fn(),
     findOwnedById: vi.fn(async (documentId, userId) =>
       documents.get(documentKey(documentId, userId)) ?? null,

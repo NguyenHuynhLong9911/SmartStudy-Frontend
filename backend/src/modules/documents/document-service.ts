@@ -140,6 +140,10 @@ export class DocumentService implements IDocumentService {
       throw new DocumentNotFoundError();
     }
 
+    if (this.config.uploadOnly) {
+      return this.completeUploadOnly(document, userId);
+    }
+
     if (document.status === "uploading") {
       await this.verifyUploadedObject(document);
       const transitioned = await this.repository.markProcessing(
@@ -171,23 +175,6 @@ export class DocumentService implements IDocumentService {
       throw new InvalidDocumentStateError(document.status);
     }
 
-    if (this.config.uploadOnly) {
-      await this.repository.replaceChunksAndMarkReady({
-        chapters: [],
-        chunks: [],
-        documentId: document.id,
-        pageCount: 1,
-        userId,
-      });
-
-      return toDocumentSummary({
-        ...document,
-        chapters: [],
-        pageCount: 1,
-        status: "ready",
-      });
-    }
-
     await this.queueProvider.enqueue<ProcessDocumentJob>(
       this.config.processingQueue,
       {
@@ -202,6 +189,48 @@ export class DocumentService implements IDocumentService {
     );
 
     return toDocumentSummary(document);
+  }
+
+  private async completeUploadOnly(
+    document: DocumentRecord,
+    userId: string,
+  ): Promise<DocumentSummary> {
+    if (document.status === "ready") {
+      return toDocumentSummary(document);
+    }
+
+    if (document.status !== "uploading" && document.status !== "processing") {
+      throw new InvalidDocumentStateError(document.status);
+    }
+
+    await this.verifyUploadedObject(document);
+
+    const completed = await this.repository.completeUploadedDocument({
+      documentId: document.id,
+      pageCount: 1,
+      userId,
+    });
+
+    if (!completed) {
+      const current = await this.repository.findOwnedById(document.id, userId);
+
+      if (!current) {
+        throw new DocumentNotFoundError();
+      }
+
+      if (current.status === "ready") {
+        return toDocumentSummary(current);
+      }
+
+      throw new InvalidDocumentStateError(current.status);
+    }
+
+    return toDocumentSummary({
+      ...document,
+      chapters: [],
+      pageCount: 1,
+      status: "ready",
+    });
   }
 
   async deleteDocument(documentId: string, userId: string): Promise<void> {

@@ -59,6 +59,7 @@ describe("DoD Phase 1: End-to-End RAG workflow", () => {
     const storedChunks: DocumentChunkInput[] = [];
 
     const documentRepository: IDocumentRepository = {
+      completeUploadedDocument: vi.fn(async () => true),
       createUploading: vi.fn(async (input) => {
         storedDocument = {
           ...storedDocument,

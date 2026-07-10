@@ -98,6 +98,7 @@ function createChatRepository(): IChatRepository {
 
 function createDocumentRepository(): IDocumentRepository {
   return {
+    completeUploadedDocument: vi.fn(async () => true),
     createUploading: vi.fn(async () => createDocument("uploading")),
     findOwnedById: vi.fn(async () => createDocument()),
     listChunks: vi.fn(async () => []),
