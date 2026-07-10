@@ -26,9 +26,16 @@ export const LearningSpacePage: React.FC = () => {
   const fetchDocuments = async () => {
     const docs = await documentService.listDocuments();
     setDocuments(docs);
-    if (!selectedDocId && docs[0]) {
+
+    if (!docs.length) {
+      return docs;
+    }
+
+    const selectedStillExists = docs.some((doc) => doc.id === selectedDocId);
+    if (!selectedDocId || !selectedStillExists) {
       setSelectedDocId(docs[0].id);
     }
+
     return docs;
   };
 
@@ -64,11 +71,7 @@ export const LearningSpacePage: React.FC = () => {
 
       setIsPreviewLoading(true);
       try {
-        const url = currentDoc.previewUrl || currentDoc.downloadUrl;
-        if (!url) {
-          setPreviewError('Preview link is not available yet. Refresh the document list and try again.');
-          return;
-        }
+        const url = currentDoc.previewUrl || currentDoc.downloadUrl || await documentService.getDownloadUrl(currentDoc.id);
         setPreviewUrl(url);
       } catch (error) {
         setPreviewError(error instanceof Error ? error.message : 'Could not load PDF preview.');
@@ -78,7 +81,7 @@ export const LearningSpacePage: React.FC = () => {
     };
 
     void loadPreview();
-  }, [currentDoc?.id, currentDoc?.status]);
+  }, [currentDoc?.id, currentDoc?.status, currentDoc?.previewUrl, currentDoc?.downloadUrl]);
 
   if (isLoading) {
     return (
@@ -179,12 +182,9 @@ export const LearningSpacePage: React.FC = () => {
                 try {
                   const docs = await fetchDocuments();
                   const refreshedDoc = docs.find((doc) => doc.id === currentDoc.id);
-                  const url = refreshedDoc?.previewUrl || refreshedDoc?.downloadUrl;
-                  if (!url) {
-                    setPreviewUrl('');
-                    setPreviewError('Preview link is not available yet. Refresh the page and try again.');
-                    return;
-                  }
+                  const fallbackDoc = refreshedDoc || docs[0];
+                  if (!fallbackDoc) return;
+                  const url = fallbackDoc.previewUrl || fallbackDoc.downloadUrl || await documentService.getDownloadUrl(fallbackDoc.id);
                   setPreviewUrl(url);
                 } catch (error) {
                   setPreviewError(error instanceof Error ? error.message : 'Could not refresh PDF preview.');
