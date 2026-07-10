@@ -117,18 +117,15 @@ export const documentService = {
 
   async downloadDocumentFile(id: string, title: string): Promise<void> {
     try {
-      const response = await api.get<Blob>(`/documents/${id}/file`, {
-        responseType: 'blob',
-      });
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const url = await this.getDownloadUrl(id);
       const link = document.createElement('a');
       link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
       link.download = `${sanitizeFilename(title)}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
     } catch (error) {
       throw normalizeApiError(error, 'Downloading the PDF failed. Please try again.');
     }
