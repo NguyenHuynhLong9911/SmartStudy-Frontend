@@ -23,9 +23,14 @@ interface CognitoPayload {
 }
 
 export class CognitoAuthProvider implements IAuthProvider {
-  private readonly verifier: CognitoJwtVerifierSingleUserPool<{
+  private readonly accessTokenVerifier: CognitoJwtVerifierSingleUserPool<{
     clientId: string;
-    tokenUse: "access" | "id";
+    tokenUse: "access";
+    userPoolId: string;
+  }>;
+  private readonly idTokenVerifier: CognitoJwtVerifierSingleUserPool<{
+    clientId: string;
+    tokenUse: "id";
     userPoolId: string;
   }>;
 
@@ -33,9 +38,14 @@ export class CognitoAuthProvider implements IAuthProvider {
     private readonly config: CognitoAuthConfig,
     private readonly syncUser: (claims: AuthClaims, profile: CognitoUserProfile) => Promise<void>,
   ) {
-    this.verifier = CognitoJwtVerifier.create({
+    this.accessTokenVerifier = CognitoJwtVerifier.create({
       clientId: config.clientId,
-      tokenUse: config.tokenUse,
+      tokenUse: "access",
+      userPoolId: config.userPoolId,
+    });
+    this.idTokenVerifier = CognitoJwtVerifier.create({
+      clientId: config.clientId,
+      tokenUse: "id",
       userPoolId: config.userPoolId,
     });
   }
@@ -62,24 +72,26 @@ export class CognitoAuthProvider implements IAuthProvider {
 
   async verifyToken(accessToken: string): Promise<AuthClaims> {
     try {
-      const payload = (await this.verifier.verify(accessToken)) as CognitoPayload;
+      const payload = await this.verifyCognitoToken(accessToken);
       const sub = payload.sub;
 
       if (!sub) {
         throw new InvalidTokenError();
       }
 
-      const email = resolveEmail(payload);
+      const profile = resolveProfile(payload, sub);
       const claims: AuthClaims = {
-        email,
+        email: profile.email,
         role: resolveRole(payload),
         sub,
       };
 
-      await this.syncUser(claims, {
-        emailVerified: payload.email_verified === true,
-        ...(payload.name ? { fullName: payload.name } : {}),
-      });
+      if (profile.canSyncUser) {
+        await this.syncUser(claims, {
+          emailVerified: profile.emailVerified,
+          ...(profile.fullName ? { fullName: profile.fullName } : {}),
+        });
+      }
 
       return claims;
     } catch (error) {
@@ -90,6 +102,24 @@ export class CognitoAuthProvider implements IAuthProvider {
       throw new InvalidTokenError();
     }
   }
+
+  private async verifyCognitoToken(token: string): Promise<CognitoPayload> {
+    const verifiers =
+      this.config.tokenUse === "access"
+        ? [this.accessTokenVerifier, this.idTokenVerifier]
+        : [this.idTokenVerifier, this.accessTokenVerifier];
+
+    for (const verifier of verifiers) {
+      try {
+        return (await verifier.verify(token)) as CognitoPayload;
+      } catch {
+        // Try the other Cognito token type. Browser OIDC libraries can expose
+        // either token depending on storage timing and provider settings.
+      }
+    }
+
+    throw new InvalidTokenError();
+  }
 }
 
 export interface CognitoUserProfile {
@@ -97,20 +127,44 @@ export interface CognitoUserProfile {
   readonly fullName?: string;
 }
 
-function resolveEmail(payload: CognitoPayload): string {
+interface ResolvedCognitoProfile {
+  readonly canSyncUser: boolean;
+  readonly email: string;
+  readonly emailVerified: boolean;
+  readonly fullName?: string;
+}
+
+function resolveProfile(
+  payload: CognitoPayload,
+  sub: string,
+): ResolvedCognitoProfile {
   const email = payload.email?.trim().toLowerCase();
 
   if (email) {
-    return email;
+    return {
+      canSyncUser: true,
+      email,
+      emailVerified: payload.email_verified === true,
+      ...(payload.name ? { fullName: payload.name } : {}),
+    };
   }
 
   const username = payload.username?.trim().toLowerCase();
 
   if (username && username.includes("@")) {
-    return username;
+    return {
+      canSyncUser: true,
+      email: username,
+      emailVerified: payload.email_verified === true,
+      ...(payload.name ? { fullName: payload.name } : {}),
+    };
   }
 
-  throw new InvalidTokenError();
+  return {
+    canSyncUser: false,
+    email: `${sub}@cognito.local`,
+    emailVerified: false,
+  };
 }
 
 function resolveRole(payload: CognitoPayload): UserRole {
