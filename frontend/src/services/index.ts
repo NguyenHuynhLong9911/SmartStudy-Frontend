@@ -1,5 +1,12 @@
 import axios from 'axios';
-import { api, setTokens, setStoredUser, clearAuth, getRefreshToken } from './api';
+import {
+  api,
+  setTokens,
+  setStoredUser,
+  clearAuth,
+  getRefreshToken,
+  getCognitoAuthToken,
+} from './api';
 export * from './api';
 import {
   AuthResponse,
@@ -67,6 +74,9 @@ export const documentService = {
     }
 
     const docTitle = title || file.name.replace(/\.[^/.]+$/, '');
+    if (!getCognitoAuthToken()) {
+      throw new Error('Your sign-in session is still loading. Please refresh the page and try again.');
+    }
 
     const presignedResp = await api.post<PresignedUploadResponse>('/documents/upload-url', {
       title: docTitle,

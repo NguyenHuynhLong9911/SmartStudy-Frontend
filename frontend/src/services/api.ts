@@ -42,7 +42,14 @@ export const clearAuth = () => {
 
 export const setCognitoAuthToken = (token: string | null | undefined) => {
   currentCognitoToken = token || null;
+  if (currentCognitoToken) {
+    api.defaults.headers.common.Authorization = `Bearer ${currentCognitoToken}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
 };
+
+export const getCognitoAuthToken = (): string | null => getCognitoIdToken();
 
 const notifyAuthExpired = () => {
   if (typeof window !== 'undefined') {
@@ -128,12 +135,16 @@ function parseOidcIdToken(value: string | null): string | null {
   }
 
   try {
-    const parsed = JSON.parse(value) as { id_token?: string; expires_at?: number };
+    const parsed = JSON.parse(value) as {
+      access_token?: string;
+      expires_at?: number;
+      id_token?: string;
+    };
     if (
-      parsed.id_token &&
+      (parsed.id_token || parsed.access_token) &&
       (!parsed.expires_at || parsed.expires_at > Math.floor(Date.now() / 1000))
     ) {
-      return parsed.id_token;
+      return parsed.id_token || parsed.access_token || null;
     }
   } catch {
     return null;
