@@ -7,9 +7,8 @@ custom:
   storageBucket: ${env:STORAGE_BUCKET}
   vpcId: vpc-048899ef7000bbcfc
   rdsSecurityGroupId: sg-035e0033ea797f1cd
-  routeTableId: rtb-0b73cf1d3a54fd73c
+  routeTableId: rtb-083f2649df96c8880
   subnetIds:
-    - subnet-06726a16285d94b3f
     - subnet-0d046d5e85c0f8636
     - subnet-0c5f5774ced594ad9
 

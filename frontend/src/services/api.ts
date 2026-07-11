@@ -77,8 +77,11 @@ api.interceptors.response.use(
       !originalRequest.url?.includes('/auth/login')
     ) {
       originalRequest._retry = true;
+      const hasCognitoSession = Boolean(getCognitoIdToken());
       clearAuth();
-      notifyAuthExpired();
+      if (!hasCognitoSession) {
+        notifyAuthExpired();
+      }
     }
 
     return Promise.reject(error);

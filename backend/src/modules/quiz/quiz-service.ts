@@ -106,9 +106,8 @@ export class QuizService implements IQuizService {
       ? `Focus specifically on chapter "${input.chapterRef}".`
       : "Cover the key concepts of the document.";
 
-    const systemPrompt = `You are an expert educational assessment creator. Generate exactly ${numQuestions} multiple-choice questions based on the provided study material. ${difficultyText} ${chapterText} Each question MUST have exactly 4 options, 1 correct answer (must exactly match one of the 4 options or be option letter A, B, C, or D), and a clear pedagogical explanation. Return ONLY a JSON object matching the requested schema without markdown formatting or commentary.`;
-    const schemaDescription =
-      "An object with property 'questions' which is an array of objects containing question_id (string), question_text (string), options (array of 4 strings), correct_answer (string matching one of options or A/B/C/D), and explanation (string).";
+    const systemPrompt = `You are an expert educational assessment creator. Generate exactly ${numQuestions} multiple-choice questions based on the provided study material. ${difficultyText} ${chapterText} Each question MUST have exactly 4 distinct options, 1 correct answer (must exactly match one of the 4 options or be option letter A, B, C, or D), and a clear pedagogical explanation. Return ONLY a JSON object matching the requested schema without markdown formatting or commentary.`;
+    const schemaDescription = JSON.stringify(quizQuestionSetJsonSchema(numQuestions));
 
     const maxAttempts = 3;
     let lastError = "Unknown error during quiz generation.";
@@ -117,10 +116,11 @@ export class QuizService implements IQuizService {
       try {
         const rawResult = await this.llmProvider.generateStructuredJSON<unknown>(
           {
+            maxTokens: Math.max(768, numQuestions * 384),
             messages: [{ content: sourceText, role: "user" }],
             schemaDescription,
             systemPrompt,
-            temperature: 0.4,
+            temperature: 0.25 + (attempt - 1) * 0.1,
           },
         );
 
@@ -367,7 +367,7 @@ function generateLocalQuizQuestions(
 
 function splitSentences(text: string): readonly string[] {
   return normalizeWhitespace(text)
-    .split(/(?<=[.!?。！？])\s+/u)
+    .split(/(?<=[.!?])\s+|\n+/u)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length >= 40)
     .slice(0, 60);
@@ -466,4 +466,44 @@ function truncateText(text: string, maxLength: number): string {
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
+}
+
+function quizQuestionSetJsonSchema(
+  numQuestions: number,
+): Record<string, unknown> {
+  return {
+    additionalProperties: false,
+    properties: {
+      questions: {
+        items: {
+          additionalProperties: false,
+          properties: {
+            correct_answer: { type: "string" },
+            explanation: { type: "string" },
+            options: {
+              items: { type: "string" },
+              maxItems: 4,
+              minItems: 4,
+              type: "array",
+            },
+            question_id: { type: "string" },
+            question_text: { type: "string" },
+          },
+          required: [
+            "question_id",
+            "question_text",
+            "options",
+            "correct_answer",
+            "explanation",
+          ],
+          type: "object",
+        },
+        maxItems: numQuestions,
+        minItems: numQuestions,
+        type: "array",
+      },
+    },
+    required: ["questions"],
+    type: "object",
+  };
 }
