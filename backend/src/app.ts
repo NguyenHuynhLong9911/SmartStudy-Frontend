@@ -16,7 +16,8 @@ import { createSummaryRouter } from "./modules/summary/summary-routes.js";
 import type { ISummaryService } from "./modules/summary/summary-service.js";
 import { createTutorRouter } from "./modules/tutor/tutor-routes.js";
 import type { ITutorService } from "./modules/tutor/tutor-service.js";
-import type { IAuthProvider } from "./ports/index.js";
+import type { TrustedHeaderAuthProfile } from "./middleware/require-auth.js";
+import type { AuthClaims, IAuthProvider } from "./ports/index.js";
 
 export interface AppDependencies {
   readonly authProvider: IAuthProvider;
@@ -26,6 +27,10 @@ export interface AppDependencies {
   readonly examService?: IExamService;
   readonly quizService?: IQuizService;
   readonly summaryService: ISummaryService;
+  readonly syncTrustedUser?: (
+    claims: AuthClaims,
+    profile: TrustedHeaderAuthProfile,
+  ) => Promise<void>;
   readonly tutorService?: ITutorService;
 }
 
@@ -71,6 +76,7 @@ export function createApp(dependencies: AppDependencies): Express {
       dependencies.authProvider,
       dependencies.documentService,
       dependencies.documentConfig,
+      dependencies.syncTrustedUser,
     ),
   );
   app.use(

@@ -6,6 +6,7 @@ import {
   clearAuth,
   getRefreshToken,
   getCognitoAuthToken,
+  getCognitoAuthUser,
 } from './api';
 export * from './api';
 import {
@@ -74,7 +75,7 @@ export const documentService = {
     }
 
     const docTitle = title || file.name.replace(/\.[^/.]+$/, '');
-    if (!getCognitoAuthToken()) {
+    if (!getCognitoAuthToken() && !getCognitoAuthUser()) {
       throw new Error('Your sign-in session is still loading. Please refresh the page and try again.');
     }
 

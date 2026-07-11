@@ -8,15 +8,29 @@ import {
   ExamCenterPage,
   ResultsPage,
 } from './pages';
-import { setCognitoAuthToken } from './services/api';
+import { setCognitoAuthContext } from './services/api';
 
 export const App: React.FC = () => {
   const auth = useAuth();
   const [sessionExpired, setSessionExpired] = React.useState(false);
 
   React.useEffect(() => {
-    setCognitoAuthToken(auth.user?.id_token ?? auth.user?.access_token ?? null);
-  }, [auth.user?.access_token, auth.user?.id_token]);
+    const email = auth.user?.profile.email;
+    const name = auth.user?.profile.name;
+    const userId = auth.user?.profile.sub;
+
+    setCognitoAuthContext(auth.user?.id_token ?? auth.user?.access_token ?? null, {
+      ...(typeof email === 'string' ? { email } : {}),
+      ...(typeof name === 'string' ? { name } : {}),
+      ...(typeof userId === 'string' ? { userId } : {}),
+    });
+  }, [
+    auth.user?.access_token,
+    auth.user?.id_token,
+    auth.user?.profile.email,
+    auth.user?.profile.name,
+    auth.user?.profile.sub,
+  ]);
 
   React.useEffect(() => {
     const handleAuthExpired = () => {

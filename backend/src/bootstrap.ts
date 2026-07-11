@@ -103,6 +103,13 @@ export function createApiRuntime(
       documentService,
       examService,
       quizService,
+      syncTrustedUser: (claims, profile) =>
+        authRepository.upsertExternalUser({
+          email: claims.email,
+          emailVerified: profile.emailVerified,
+          ...(profile.fullName ? { fullName: profile.fullName } : {}),
+          id: claims.sub,
+        }).then(() => undefined),
       summaryService,
       tutorService,
     }),

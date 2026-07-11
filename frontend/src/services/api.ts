@@ -15,6 +15,13 @@ const TOKEN_KEY = 'smartstudy_access_token';
 const REFRESH_TOKEN_KEY = 'smartstudy_refresh_token';
 const USER_KEY = 'smartstudy_user';
 let currentCognitoToken: string | null = null;
+let currentCognitoUser: CognitoAuthUserContext | null = null;
+
+export interface CognitoAuthUserContext {
+  readonly email?: string;
+  readonly name?: string;
+  readonly userId?: string;
+}
 
 export const getAccessToken = (): string | null => localStorage.getItem(TOKEN_KEY);
 export const getRefreshToken = (): string | null => localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -51,6 +58,17 @@ export const setCognitoAuthToken = (token: string | null | undefined) => {
 
 export const getCognitoAuthToken = (): string | null => getCognitoIdToken();
 
+export const setCognitoAuthContext = (
+  token: string | null | undefined,
+  user: CognitoAuthUserContext | null | undefined,
+) => {
+  setCognitoAuthToken(token);
+  currentCognitoUser = normalizeCognitoUser(user);
+};
+
+export const getCognitoAuthUser = (): CognitoAuthUserContext | null =>
+  currentCognitoUser ?? readOidcUserContext(sessionStorage) ?? readOidcUserContext(localStorage);
+
 const notifyAuthExpired = () => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('smartstudy:auth-expired'));
@@ -66,6 +84,17 @@ api.interceptors.request.use(
       const accessToken = cognitoToken || token;
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
+      }
+
+      const cognitoUser = getCognitoAuthUser();
+      if (cognitoUser?.userId) {
+        config.headers['x-smartstudy-user-id'] = cognitoUser.userId;
+      }
+      if (cognitoUser?.email) {
+        config.headers['x-smartstudy-user-email'] = cognitoUser.email;
+      }
+      if (cognitoUser?.name) {
+        config.headers['x-smartstudy-user-name'] = cognitoUser.name;
       }
     }
     return config;
@@ -129,6 +158,28 @@ function readOidcIdToken(storage: Storage): string | null {
   return null;
 }
 
+function readOidcUserContext(storage: Storage): CognitoAuthUserContext | null {
+  const direct = storage.getItem(cognitoStoragePrefix);
+  const directUser = parseOidcUserContext(direct);
+  if (directUser) {
+    return directUser;
+  }
+
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key?.startsWith('oidc.user:')) {
+      continue;
+    }
+
+    const user = parseOidcUserContext(storage.getItem(key));
+    if (user) {
+      return user;
+    }
+  }
+
+  return null;
+}
+
 function parseOidcIdToken(value: string | null): string | null {
   if (!value) {
     return null;
@@ -151,4 +202,55 @@ function parseOidcIdToken(value: string | null): string | null {
   }
 
   return null;
+}
+
+function parseOidcUserContext(value: string | null): CognitoAuthUserContext | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      expires_at?: number;
+      profile?: {
+        email?: unknown;
+        name?: unknown;
+        sub?: unknown;
+      };
+    };
+
+    if (parsed.expires_at && parsed.expires_at <= Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+
+    const email = parsed.profile?.email;
+    const name = parsed.profile?.name;
+    const userId = parsed.profile?.sub;
+
+    return normalizeCognitoUser({
+      ...(typeof email === 'string' ? { email } : {}),
+      ...(typeof name === 'string' ? { name } : {}),
+      ...(typeof userId === 'string' ? { userId } : {}),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function normalizeCognitoUser(
+  user: CognitoAuthUserContext | null | undefined,
+): CognitoAuthUserContext | null {
+  const userId = user?.userId?.trim();
+  const email = user?.email?.trim().toLowerCase();
+  const name = user?.name?.trim();
+
+  if (!userId || !email) {
+    return null;
+  }
+
+  return {
+    email,
+    ...(name ? { name } : {}),
+    userId,
+  };
 }

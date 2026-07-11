@@ -2,8 +2,12 @@ import { pipeline } from "node:stream/promises";
 
 import { Router, type NextFunction, type Request, type Response } from "express";
 
-import { getAuthClaims, requireAuth } from "../../middleware/require-auth.js";
-import type { IAuthProvider } from "../../ports/index.js";
+import {
+  getAuthClaims,
+  requireAuth,
+  type TrustedHeaderAuthProfile,
+} from "../../middleware/require-auth.js";
+import type { AuthClaims, IAuthProvider } from "../../ports/index.js";
 import type { DocumentConfig } from "./document-config.js";
 import type { IDocumentService } from "./document-service.js";
 import {
@@ -17,11 +21,19 @@ export function createDocumentRouter(
   authProvider: IAuthProvider,
   documentService: IDocumentService,
   config: DocumentConfig,
+  syncTrustedUser?: (
+    claims: AuthClaims,
+    profile: TrustedHeaderAuthProfile,
+  ) => Promise<void>,
 ): Router {
   const router = Router();
   const uploadSchema = createDocumentUploadSchema(config.maxFileSizeBytes);
 
-  router.use(requireAuth(authProvider));
+  router.use(
+    requireAuth(authProvider, {
+      ...(syncTrustedUser ? { syncTrustedUser } : {}),
+    }),
+  );
 
   router.get(
     "/",
