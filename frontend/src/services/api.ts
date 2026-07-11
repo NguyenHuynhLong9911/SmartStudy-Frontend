@@ -14,6 +14,7 @@ export const api = axios.create({
 const TOKEN_KEY = 'smartstudy_access_token';
 const REFRESH_TOKEN_KEY = 'smartstudy_refresh_token';
 const USER_KEY = 'smartstudy_user';
+let currentCognitoToken: string | null = null;
 
 export const getAccessToken = (): string | null => localStorage.getItem(TOKEN_KEY);
 export const getRefreshToken = (): string | null => localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -37,6 +38,10 @@ export const clearAuth = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+};
+
+export const setCognitoAuthToken = (token: string | null | undefined) => {
+  currentCognitoToken = token || null;
 };
 
 const notifyAuthExpired = () => {
@@ -89,6 +94,10 @@ api.interceptors.response.use(
 );
 
 function getCognitoIdToken(): string | null {
+  if (currentCognitoToken) {
+    return currentCognitoToken;
+  }
+
   return readOidcIdToken(sessionStorage) ?? readOidcIdToken(localStorage);
 }
 

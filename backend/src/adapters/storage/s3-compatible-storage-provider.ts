@@ -126,7 +126,7 @@ export class S3CompatibleStorageProvider implements IStorageProvider {
       new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: key,
-        ResponseContentDisposition: "attachment",
+        ResponseContentDisposition: "inline",
       }),
       safeExpiresInSeconds,
     );

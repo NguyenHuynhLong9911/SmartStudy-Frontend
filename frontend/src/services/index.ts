@@ -115,17 +115,13 @@ export const documentService = {
     return response.data.url;
   },
 
-  async downloadDocumentFile(id: string, title: string): Promise<void> {
+  async downloadDocumentFile(id: string, _title: string): Promise<void> {
     try {
       const url = await this.getDownloadUrl(id);
-      const link = document.createElement('a');
-      link.href = url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.download = `${sanitizeFilename(title)}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        window.location.assign(url);
+      }
     } catch (error) {
       throw normalizeApiError(error, 'Downloading the PDF failed. Please try again.');
     }
@@ -247,12 +243,4 @@ function normalizeApiError(error: unknown, fallbackMessage: string): Error {
   }
 
   return error instanceof Error ? error : new Error(fallbackMessage);
-}
-
-function sanitizeFilename(value: string): string {
-  return value
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
-    .replace(/\s+/g, ' ')
-    .slice(0, 120) || 'document';
 }
