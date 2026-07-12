@@ -7,6 +7,7 @@ import {
   LearningSpacePage,
   ExamCenterPage,
   ResultsPage,
+  StudyToolsPage,
 } from './pages';
 
 export const App: React.FC = () => {
@@ -88,6 +89,7 @@ export const App: React.FC = () => {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/learning" element={<LearningSpacePage />} />
           <Route path="/exam-center" element={<ExamCenterPage />} />
+          <Route path="/study-tools" element={<StudyToolsPage />} />
           <Route path="/results" element={<ResultsPage />} />
         </Route>
 

@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Sparkles,
+  TimerReset,
   User as UserIcon,
 } from 'lucide-react';
 import { clearAuth } from '../../services';
@@ -32,6 +33,7 @@ export const Sidebar: React.FC = () => {
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/learning', label: 'Learning Space', icon: BookOpen },
     { to: '/exam-center', label: 'Exam Center', icon: FileQuestion },
+    { to: '/study-tools', label: 'Study Tools', icon: TimerReset },
     { to: '/results', label: 'Results', icon: BarChart2 },
   ];
 

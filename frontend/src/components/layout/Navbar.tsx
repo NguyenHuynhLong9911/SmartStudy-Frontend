@@ -25,6 +25,12 @@ export const Navbar: React.FC = () => {
         subtitle: 'Quiz and exam generation are paused until AI processing is enabled.',
       };
     }
+    if (pathname.startsWith('/study-tools')) {
+      return {
+        title: 'Study Tools',
+        subtitle: 'Focus timer, notes, checklist, and flashcards.',
+      };
+    }
     if (pathname.startsWith('/results')) {
       return {
         title: 'Results',
